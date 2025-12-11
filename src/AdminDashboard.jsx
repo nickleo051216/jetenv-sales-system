@@ -1,4 +1,6 @@
 import React, { useState, useEffect } from 'react';
+import { initialClients, regulationsData } from './data/clients';
+import { useNavigate } from 'react-router-dom';
 import {
   Calendar,
   FileText,
@@ -24,171 +26,13 @@ import {
 } from 'lucide-react';
 
 // --- Client List Data ---
-const initialClients = [
-  { id: 1, name: 'XX化工', status: '試車階段', type: ['Water', 'Air'], nextAction: '排放許可申請', deadline: '2025-02-28', phase: 2 },
-  { id: 2, name: 'OO電鍍', status: '規劃階段', type: ['Water', 'Soil'], nextAction: '水措計畫書', deadline: '2025-01-15', phase: 1 },
-  { id: 3, name: '三角科技', status: '營運中', type: ['Air', 'Toxic'], nextAction: '空污費申報', deadline: '2025-01-31', phase: 3 },
-  { id: 4, name: '大發加油站', status: '營運中', type: ['Soil'], nextAction: '土壤氣體監測', deadline: '2025-01-31', phase: 3 },
-];
+// --- Client List Data ---
+// Imported from ./data/clients.js
 
 // --- MASTER REGULATION DATA (Source of Truth) ---
 // This dataset drives both the Calendar and the Library views.
-const regulationsData = [
-  {
-    id: 'air-fee',
-    category: 'air',
-    categoryName: '💨 空污',
-    item: '空污費季報',
-    months: [1, 4, 7, 10],
-    deadline: '每季底前',
-    period: '前一季排放量',
-    law: '空氣污染防制費收費辦法 §3',
-    url: 'https://oaout.moenv.gov.tw/law/LawContent.aspx?id=FL015371',
-    details: ['1月底前：申報上年10-12月', '4月底前：申報1-3月', '7月底前：申報4-6月', '10月底前：申報7-9月'],
-    warning: '⚠️ 常見錯誤：誤引「空污防制法§74」，該條是罰則，非申報依據！',
-    tip: '逾期會被加徵滯納金，系統會限制匯入功能。'
-  },
-  {
-    id: 'vocs-inspection',
-    category: 'air',
-    categoryName: '💨 空污',
-    item: 'VOCs設備元件檢測申報',
-    months: [1, 4, 7, 10],
-    deadline: '每季底前',
-    period: '前一季檢測紀錄',
-    law: '揮發性有機物空氣污染管制及排放標準 §33',
-    url: 'https://oaout.moenv.gov.tw/law/LawContent.aspx?id=FL015377',
-    details: ['適用：石化製程、有機液體儲槽、裝載操作設施', '洩漏確認後24小時內初步修護', '紀錄保存5年'],
-    warning: '🚨 114年起洩漏標準加嚴：≥1,000 ppm（原10,000 ppm）',
-    tip: '檢測頻率變更是很好的商機切入點！'
-  },
-  {
-    id: 'vocs-frequency',
-    category: 'air',
-    categoryName: '💨 空污',
-    item: 'VOCs設備元件檢測頻率',
-    months: [], // Not a specific reporting month, reference data
-    deadline: '依設備類型',
-    period: '檢測作業',
-    law: '揮發性有機物空氣污染管制及排放標準 §31',
-    url: 'https://oaout.moenv.gov.tw/law/LawContent.aspx?id=FL015377',
-    details: ['輕質液泵浦軸封：每週目視', '輕質液及氣體元件：每3個月', '難檢測重質液：現行每4年→115年起每1年', '難檢測輕質液及氣體：現行每2年→115年起每1年'],
-    warning: '⚠️ 常見錯誤：難檢測輕質液現行是每2年（非4年）！',
-    tip: '115年起全面加嚴為每年。'
-  },
-  {
-    id: 'air-permit',
-    category: 'air',
-    categoryName: '💨 空污',
-    item: '設置/操作許可證',
-    months: [],
-    deadline: '動工前/營運前',
-    period: '新設/變更時',
-    law: '固定污染源設置操作及燃料使用許可證管理辦法',
-    url: 'https://oaout.moenv.gov.tw/Law/LawContent.aspx?id=FL015356',
-    details: ['設置許可：動工前取得', '操作許可：試車完成後取得', '有效期間5年，期滿前3-6個月申請展延'],
-    warning: '🚨 保命符：沒拿到設置許可證，絕對不能動工！',
-    tip: '💰 每5年展延 = 穩定回頭客'
-  },
-  {
-    id: 'water-quarter',
-    category: 'water',
-    categoryName: '💧 廢水',
-    item: '廢水檢測申報（特定大型事業）',
-    months: [1, 4, 7, 10],
-    deadline: '每季底前',
-    period: '前一季資料',
-    law: '水污染防治措施及檢測申報管理辦法 §93',
-    url: 'https://oaout.moenv.gov.tw/law/LawContent.aspx?id=FL040734',
-    details: ['採樣前5日預申報', '採樣後24小時內回報', '紀錄保存5年'],
-    warning: '⚠️ 常見錯誤：水污法全文僅75條，沒有§93！正確是子法的§93',
-    tip: '很多客戶搞不清楚自己是一般還是特定。'
-  },
-  {
-    id: 'water-half',
-    category: 'water',
-    categoryName: '💧 廢水',
-    item: '廢水檢測申報（一般事業）',
-    months: [1, 7],
-    deadline: '1月底、7月底',
-    period: '前半年資料',
-    law: '水污染防治措施及檢測申報管理辦法 §93',
-    url: 'https://oaout.moenv.gov.tw/law/LawContent.aspx?id=FL040734',
-    details: ['1月底前：申報上年7-12月', '7月底前：申報當年1-6月'],
-    warning: '',
-    tip: '一般事業數量最多，是主要客群。'
-  },
-  {
-    id: 'water-fee',
-    category: 'water',
-    categoryName: '💧 廢水',
-    item: '水污費申報',
-    months: [1, 7],
-    deadline: '1月底、7月底',
-    period: '前半年',
-    law: '事業及污水下水道系統水污染防治費收費辦法 §14',
-    url: 'https://oaout.moenv.gov.tw/law/LawContent.aspx?id=FL040165',
-    details: ['1月底前：申報前一年7-12月', '7月底前：申報當年1-6月', '費用≥50元需繳費'],
-    warning: '📌 費用未滿100元免繳納，但「仍需申報」！',
-    tip: ''
-  },
-  {
-    id: 'water-permit',
-    category: 'water',
-    categoryName: '💧 廢水',
-    item: '水措計畫書/排放許可證',
-    months: [],
-    deadline: '動工前/營運前',
-    period: '新設/變更時',
-    law: '水污染防治措施計畫及許可申請審查管理辦法',
-    url: 'https://oaout.moenv.gov.tw/law/LawContent.aspx?id=GL005950',
-    details: ['水措計畫書：動工前取得核准函', '排放許可證：試車完成後取得', '有效期間5年'],
-    warning: '🚨 保命符：沒拿到水措核准函，絕對不能動工！',
-    tip: '💰 每5年展延 = 穩定回頭客'
-  },
-  {
-    id: 'toxic',
-    category: 'toxic',
-    categoryName: '☢️ 毒化物',
-    item: '毒物釋放量年報',
-    months: [1],
-    deadline: '1月31日前',
-    period: '前一年1-12月',
-    law: '毒性及關注化學物質運作與釋放量紀錄管理辦法 §6',
-    url: 'https://oaout.moenv.gov.tw/law/LawContent.aspx?id=FL044796',
-    details: ['統計前一年全年釋放量', '2-3月環保局檢核', '12月公布結果'],
-    warning: '⚠️ 法規已更名：原「毒性化學物質管理法」→「毒性及關注化學物質管理法」(108年)',
-    tip: ''
-  },
-  {
-    id: 'soil',
-    category: 'soil',
-    categoryName: '🌍 土壤',
-    item: '地下儲槽土壤氣體監測申報',
-    months: [1, 5, 9],
-    deadline: '1/5/9月底前',
-    period: '前4個月監測資料',
-    law: '防止貯存系統污染地下水體設施及監測設備設置管理辦法 §16',
-    url: 'https://oaout.moenv.gov.tw/law/LawContent.aspx?id=FL022348',
-    details: ['1月底前：申報前年9-12月', '5月底前：申報1-4月', '9月底前：申報5-8月', '自行監測：每月1次', '委託監測：每4個月1次'],
-    warning: '⚠️ 常見錯誤：「貯存系統污染防治辦法」不存在！要用完整名稱',
-    tip: '加油站是主要客群。'
-  },
-  {
-    id: 'factory',
-    category: 'factory',
-    categoryName: '🏭 工廠',
-    item: '工廠危險物品申報',
-    months: [1, 7],
-    deadline: '1月、7月',
-    period: '製造、加工、使用紀錄',
-    law: '工廠危險物品申報辦法 §11',
-    url: 'https://law.moea.gov.tw/LawContent.aspx?id=FL056111',
-    details: ['初報：達管制量次日起10日內', '定期申報：每年1月、7月'],
-    warning: '',
-    tip: '這是經濟部的規定，不是環保署。'
-  }
-];
+// --- MASTER REGULATION DATA (Source of Truth) ---
+// Imported from ./data/clients.js
 
 // --- Helper Components ---
 
@@ -788,6 +632,13 @@ export default function App() {
                 <h1 className="text-xl font-bold text-gray-900 tracking-tight">JET Sales Command</h1>
                 <p className="text-xs text-gray-500 hidden sm:block">傑太環境工程顧問 - 業務管理系統 v2.0</p>
               </div>
+              {/* Back to Home Button */}
+              <button
+                onClick={(e) => { e.stopPropagation(); navigate('/'); }}
+                className="ml-4 px-3 py-1 bg-gray-200 hover:bg-gray-300 text-gray-600 rounded text-xs font-bold transition-colors"
+              >
+                退出 (Exit)
+              </button>
             </div>
 
             {!isMobile && (

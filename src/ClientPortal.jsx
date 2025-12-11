@@ -1,62 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
+import { mockClientDatabase } from './data/clients';
 import { Search, Phone, FileText, CheckCircle, AlertTriangle, XCircle, Wind, Droplets, Trash2, Skull, ArrowRight, Calendar, BarChart3, Activity } from 'lucide-react';
-
-// 模擬資料庫 (擴充了許可證類別與承辦人電話)
-const MOCK_DATABASE = [
-    {
-        taxId: "12345678",
-        name: "台積電範例廠",
-        // 承辦人資訊
-        officer: {
-            name: "王小明",
-            title: "資深專案經理",
-            phone: "0912-345-678",
-            avatarColor: "bg-blue-600"
-        },
-        // 1. 新增：總體專案進度 (來自上一版的概念)
-        projectInfo: {
-            deadline: "2025-12-31", // 最近的重要期限
-            progress: 75,           // 整體進度百分比
-            status: "permission"    // 目前階段: setup(設置), trial(試車), permission(許可)
-        },
-        // 2. 許可證儀表板 (四大天王)
-        licenses: {
-            air: { status: 'normal', date: '2026-12-31', name: '固定污染源設置許可' },
-            water: { status: 'warning', date: '2024-06-30', name: '水污染防治許可' },
-            waste: { status: 'normal', date: '2025-08-15', name: '廢棄物清理計畫書' },
-            toxic: { status: 'none', date: '-', name: '毒化物運作核可' },
-        },
-        // 3. 近期任務
-        tasks: [
-            { id: 1, name: "Q1 放流水檢測", status: "done", date: "2024-03-15" },
-            { id: 2, name: "水污許可展延申請", status: "processing", date: "預計 2024-04-10" },
-        ]
-    },
-    {
-        taxId: "87654321",
-        name: "聯發科範例二廠",
-        officer: {
-            name: "李大華",
-            title: "專案工程師",
-            phone: "0988-777-666",
-            avatarColor: "bg-green-600"
-        },
-        projectInfo: {
-            deadline: "2025-06-30",
-            progress: 40,
-            status: "trial"
-        },
-        licenses: {
-            air: { status: 'expired', date: '2023-12-31', name: '固定污染源操作許可' },
-            water: { status: 'normal', date: '2025-10-20', name: '水污染防治許可' },
-            waste: { status: 'normal', date: '長期有效', name: '廢棄物清理計畫' },
-            toxic: { status: 'normal', date: '2025-01-01', name: '毒化物核可' },
-        },
-        tasks: [
-            { id: 1, name: "空污許可異動", status: "processing", date: "補件中" },
-        ]
-    }
-];
 
 // 小元件：許可證卡片
 const LicenseCard = ({ type, data }) => {
@@ -113,15 +58,34 @@ const LicenseCard = ({ type, data }) => {
     );
 };
 
-const ClientPortal = ({ onBack }) => {
+const ClientPortal = () => {
+    const [searchParams] = useSearchParams();
     const [inputTaxId, setInputTaxId] = useState('');
     const [searchResult, setSearchResult] = useState(null);
     const [hasSearched, setHasSearched] = useState(false);
 
+    // Deep Linking: Auto-login if ?id=... exists
+    useEffect(() => {
+        const idFromUrl = searchParams.get('id');
+        if (idFromUrl) {
+            setInputTaxId(idFromUrl);
+            const result = mockClientDatabase.find(client => client.taxId === idFromUrl);
+            if (result) {
+                setSearchResult(result);
+                setHasSearched(true);
+            }
+        }
+    }, [searchParams]);
+
     const handleSearch = () => {
-        const result = MOCK_DATABASE.find(client => client.taxId === inputTaxId);
+        const result = mockClientDatabase.find(client => client.taxId === inputTaxId);
         setSearchResult(result);
         setHasSearched(true);
+    };
+
+    // 返回功能現在由瀏覽器路由控制，或者可以導回首頁 /
+    const onBack = () => {
+        window.location.href = '/';
     };
 
     return (
@@ -295,7 +259,7 @@ const ClientPortal = ({ onBack }) => {
                 className="fixed bottom-6 left-6 text-gray-500 hover:text-gray-800 flex items-center gap-2 text-sm bg-white/90 px-5 py-3 rounded-full shadow-lg backdrop-blur border border-gray-200 font-bold transition transform hover:scale-105"
             >
                 <ArrowRight size={16} className="rotate-180" />
-                返回管理端
+                返回首頁/管理端
             </button>
         </div>
     );
