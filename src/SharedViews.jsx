@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { regulationsData } from './data/clients';
+import { supabase } from './supabaseClient';
 import {
     Calendar,
     FileText,
@@ -15,24 +16,62 @@ import {
 
 // Flowchart View - 案件流程全貌
 export const FlowchartView = () => {
+    const [stats, setStats] = useState({
+        activeProjects: 0,
+        expiringIn30Days: 0,
+        currentMonth: new Date().getMonth() + 1,
+        expiringLicenses: 0
+    });
+
+    useEffect(() => {
+        fetchStats();
+    }, []);
+
+    const fetchStats = async () => {
+        try {
+            // 1. 進行中案件數量（所有案件）
+            const { count: clientCount, error: e1 } = await supabase
+                .from('clients')
+                .select('*', { count: 'exact', head: true });
+
+            // 2. 30天內到期的許可證
+            const today = new Date();
+            const thirtyDaysLater = new Date(today.getTime() + 30 * 24 * 60 * 60 * 1000);
+            const { count: licenseCount, error: e2 } = await supabase
+                .from('licenses')
+                .select('*', { count: 'exact', head: true })
+                .gte('valid_until', today.toISOString().split('T')[0])
+                .lte('valid_until', thirtyDaysLater.toISOString().split('T')[0]);
+
+            setStats({
+                activeProjects: clientCount || 0,
+                expiringIn30Days: licenseCount || 0,
+                currentMonth: today.getMonth() + 1,
+                expiringLicenses: licenseCount || 0
+            });
+        } catch (error) {
+            console.error('讀取統計資料失敗:', error);
+        }
+    };
+
     return (
         <div className="space-y-6 animate-fade-in">
             {/* Stats Summary */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
                 <div className="bg-gradient-to-br from-teal-500 to-teal-600 text-white p-5 rounded-xl shadow-sm">
-                    <div className="text-3xl font-bold">4</div>
+                    <div className="text-3xl font-bold">{stats.activeProjects}</div>
                     <div className="text-sm opacity-90">進行中案件</div>
                 </div>
                 <div className="bg-gradient-to-br from-red-400 to-red-500 text-white p-5 rounded-xl shadow-sm">
-                    <div className="text-3xl font-bold">2</div>
+                    <div className="text-3xl font-bold">{stats.expiringIn30Days}</div>
                     <div className="text-sm opacity-90">30天內到期</div>
                 </div>
                 <div className="bg-gradient-to-br from-amber-400 to-amber-500 text-white p-5 rounded-xl shadow-sm">
-                    <div className="text-3xl font-bold">1月</div>
+                    <div className="text-3xl font-bold">{stats.currentMonth}月</div>
                     <div className="text-sm opacity-90">目前申報熱季</div>
                 </div>
                 <div className="bg-gradient-to-br from-purple-400 to-purple-500 text-white p-5 rounded-xl shadow-sm">
-                    <div className="text-3xl font-bold">1</div>
+                    <div className="text-3xl font-bold">{stats.expiringLicenses}</div>
                     <div className="text-sm opacity-90">許可證即將到期</div>
                 </div>
             </div>

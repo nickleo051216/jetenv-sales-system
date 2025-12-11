@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { initialClients, regulationsData } from './data/clients';
 import { useNavigate } from 'react-router-dom';
 import { FlowchartView, ComplianceView, RegulationLibraryView } from './SharedViews';
+import { supabase } from './supabaseClient';
 import {
   Calendar,
   FileText,
@@ -23,7 +24,10 @@ import {
   ExternalLink,
   Filter,
   Phone,
-  Globe
+  Globe,
+  Save,
+  Edit3,
+  Plus
 } from 'lucide-react';
 
 // --- Client List Data ---
@@ -74,19 +78,143 @@ const Navigation = ({ activeTab, setActiveTab, isMobile, setMenuOpen }) => {
 
 // --- Client Management View ---
 const ClientView = () => {
-  const [clients, setClients] = useState(initialClients);
+  const [clients, setClients] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
+  const [loading, setLoading] = useState(true);
+
+  // Modal states
+  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [editingClient, setEditingClient] = useState(null);
+  const [newClientForm, setNewClientForm] = useState({
+    name: '',
+    taxId: '',
+    status: '規劃階段',
+    nextAction: '',
+    deadline: ''
+  });
+
+  // 從 Supabase 讀取客戶資料
+  useEffect(() => {
+    fetchClients();
+  }, []);
+
+  const fetchClients = async () => {
+    try {
+      setLoading(true);
+      const { data, error } = await supabase
+        .from('clients')
+        .select(`
+          *,
+          officer:officers(name, phone, title, avatar_color),
+          licenses(*)
+        `)
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+
+      // 將 Supabase 資料格式轉換為前端需要的格式
+      const formattedClients = data.map(client => ({
+        id: client.id,
+        name: client.name,
+        taxId: client.tax_id,
+        status: client.status,
+        phase: client.phase,
+        nextAction: client.next_action || '待確認',
+        deadline: client.deadline || '未設定',
+        type: client.licenses?.map(l => l.type.charAt(0).toUpperCase() + l.type.slice(1)) || ['Air'],
+        licenses: client.licenses || [],
+        officer: client.officer
+      }));
+
+      setClients(formattedClients);
+    } catch (error) {
+      console.error('讀取客戶資料失敗:', error);
+      // 如果失敗，使用備用資料
+      setClients(initialClients);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // 新增客戶
+  const handleAddClient = async (e) => {
+    e.preventDefault();
+    try {
+      const phaseMap = { '規劃階段': 1, '試車階段': 2, '營運中': 3 };
+
+      const { data, error } = await supabase
+        .from('clients')
+        .insert({
+          tax_id: newClientForm.taxId,
+          name: newClientForm.name,
+          status: newClientForm.status,
+          phase: phaseMap[newClientForm.status] || 1,
+          next_action: newClientForm.nextAction,
+          deadline: newClientForm.deadline || null
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      alert('✅ 客戶新增成功！');
+      setIsAddModalOpen(false);
+      setNewClientForm({ name: '', taxId: '', status: '規劃階段', nextAction: '', deadline: '' });
+      fetchClients(); // 重新載入
+    } catch (error) {
+      console.error('新增客戶失敗:', error);
+      alert(`❌ 新增失敗：${error.message}`);
+    }
+  };
+
+  // 更新客戶
+  const handleUpdateClient = async (e) => {
+    e.preventDefault();
+    try {
+      const phaseMap = { '規劃階段': 1, '試車階段': 2, '營運中': 3 };
+
+      const { error } = await supabase
+        .from('clients')
+        .update({
+          status: editingClient.status,
+          phase: phaseMap[editingClient.status] || editingClient.phase,
+          next_action: editingClient.nextAction,
+          deadline: editingClient.deadline || null
+        })
+        .eq('id', editingClient.id);
+
+      if (error) throw error;
+
+      alert('✅ 客戶資料更新成功！');
+      setEditingClient(null);
+      fetchClients(); // 重新載入
+    } catch (error) {
+      console.error('更新客戶失敗:', error);
+      alert(`❌ 更新失敗：${error.message}`);
+    }
+  };
 
   const filteredClients = clients.filter(c =>
     c.name.includes(searchTerm) || c.status.includes(searchTerm)
   );
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <div className="text-center">
+          <div className="w-12 h-12 border-4 border-teal-200 border-t-teal-600 rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-gray-500">載入客戶資料中...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h2 className="text-xl font-bold text-gray-800">客戶案件管理 (Clients)</h2>
-          <p className="text-sm text-gray-500">管理目前手上的案件進度與代辦事項。</p>
+          <p className="text-sm text-gray-500">管理目前手上的案件進度與代辦事項。{clients.length > 0 && `（共 ${clients.length} 筆）`}</p>
         </div>
         <div className="relative">
           <Search className="w-4 h-4 absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
@@ -100,63 +228,154 @@ const ClientView = () => {
         </div>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-        {filteredClients.map(client => (
-          <div key={client.id} className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden hover:shadow-md transition-shadow">
-            {/* Status Bar */}
-            <div className={`h-1.5 w-full ${client.phase === 1 ? 'bg-red-500' :
-              client.phase === 2 ? 'bg-yellow-500' :
-                'bg-green-500'
-              }`} />
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">{filteredClients.map(client => (
+        <div key={client.id} className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden hover:shadow-md transition-shadow">
+          {/* Status Bar */}
+          <div className={`h-1.5 w-full ${client.phase === 1 ? 'bg-red-500' :
+            client.phase === 2 ? 'bg-yellow-500' :
+              'bg-green-500'
+            }`} />
 
-            <div className="p-5">
-              <div className="flex justify-between items-start mb-3">
-                <h3 className="font-bold text-lg text-gray-800">{client.name}</h3>
-                <span className={`px-2 py-1 text-xs rounded-full font-medium ${client.status === '營運中' ? 'bg-green-100 text-green-800' :
-                  client.status === '試車階段' ? 'bg-yellow-100 text-yellow-800' :
-                    'bg-red-100 text-red-800'
-                  }`}>
-                  {client.status}
-                </span>
-              </div>
-
-              <div className="flex flex-wrap gap-1 mb-4">
-                {client.type.map(t => (
-                  <span key={t} className={`text-xs px-2 py-0.5 rounded border 
-                    ${t === 'Air' ? 'bg-purple-50 text-purple-700 border-purple-100' :
-                      t === 'Water' ? 'bg-blue-50 text-blue-700 border-blue-100' :
-                        t === 'Soil' ? 'bg-amber-50 text-amber-700 border-amber-100' :
-                          'bg-red-50 text-red-700 border-red-100'}`}>
-                    {t === 'Air' ? '💨 空氣' : t === 'Water' ? '💧 廢水' : t === 'Soil' ? '🌍 土壤' : '☢️ 毒化'}
-                  </span>
-                ))}
-              </div>
-
-              <div className="space-y-2 text-sm bg-gray-50 p-3 rounded-lg">
-                <div className="flex justify-between text-gray-600">
-                  <span>下一步:</span>
-                  <span className="font-medium text-gray-900">{client.nextAction}</span>
-                </div>
-                <div className="flex justify-between text-gray-600">
-                  <span>期限:</span>
-                  <span className="font-bold text-red-600">{client.deadline}</span>
-                </div>
-              </div>
-
-              <button className="w-full mt-4 py-2 text-sm text-teal-600 font-medium border border-teal-200 rounded hover:bg-teal-50 transition-colors">
-                更新進度 →
-              </button>
+          <div className="p-5">
+            <div className="flex justify-between items-start mb-3">
+              <h3 className="font-bold text-lg text-gray-800">{client.name}</h3>
+              <span className={`px-2 py-1 text-xs rounded-full font-medium ${client.status === '營運中' ? 'bg-green-100 text-green-800' :
+                client.status === '試車階段' ? 'bg-yellow-100 text-yellow-800' :
+                  'bg-red-100 text-red-800'
+                }`}>
+                {client.status}
+              </span>
             </div>
-          </div>
-        ))}
 
-        <button className="border-2 border-dashed border-gray-300 rounded-xl p-5 flex flex-col items-center justify-center text-gray-400 hover:border-teal-400 hover:text-teal-500 transition-colors min-h-[250px] group">
+            <div className="flex flex-wrap gap-1 mb-4">
+              {client.type.map(t => (
+                <span key={t} className={`text-xs px-2 py-0.5 rounded border 
+                    ${t === 'Air' ? 'bg-purple-50 text-purple-700 border-purple-100' :
+                    t === 'Water' ? 'bg-blue-50 text-blue-700 border-blue-100' :
+                      t === 'Soil' ? 'bg-amber-50 text-amber-700 border-amber-100' :
+                        'bg-red-50 text-red-700 border-red-100'}`}>
+                  {t === 'Air' ? '💨 空氣' : t === 'Water' ? '💧 廢水' : t === 'Soil' ? '🌍 土壤' : '☢️ 毒化'}
+                </span>
+              ))}
+            </div>
+
+            <div className="space-y-2 text-sm bg-gray-50 p-3 rounded-lg">
+              <div className="flex justify-between text-gray-600">
+                <span>下一步:</span>
+                <span className="font-medium text-gray-900">{client.nextAction}</span>
+              </div>
+              <div className="flex justify-between text-gray-600">
+                <span>期限:</span>
+                <span className="font-bold text-red-600">{client.deadline}</span>
+              </div>
+            </div>
+
+            <button
+              onClick={() => setEditingClient(client)}
+              className="w-full mt-4 py-2 text-sm text-teal-600 font-medium border border-teal-200 rounded hover:bg-teal-50 transition-colors"
+            >
+              更新進度 →
+            </button>
+          </div>
+        </div>
+      ))}
+
+        <button
+          onClick={() => setIsAddModalOpen(true)}
+          className="border-2 border-dashed border-gray-300 rounded-xl p-5 flex flex-col items-center justify-center text-gray-400 hover:border-teal-400 hover:text-teal-500 transition-colors min-h-[250px] group"
+        >
           <div className="w-12 h-12 rounded-full bg-gray-100 flex items-center justify-center mb-3 group-hover:bg-teal-50 transition-colors">
-            <span className="text-3xl font-light pb-1 group-hover:text-teal-500">+</span>
+            <Plus className="w-6 h-6 group-hover:text-teal-500" />
           </div>
           <span className="font-medium">新增案件</span>
         </button>
       </div>
+
+      {/* 新增客戶 Modal */}
+      {isAddModalOpen && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4" onClick={() => setIsAddModalOpen(false)}>
+          <div className="bg-white rounded-2xl p-6 max-w-md w-full shadow-2xl" onClick={e => e.stopPropagation()}>
+            <div className="flex justify-between items-center mb-6">
+              <h3 className="text-xl font-bold text-gray-800">📋 新增委託案件</h3>
+              <button onClick={() => setIsAddModalOpen(false)} className="text-gray-400 hover:text-gray-600">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <form onSubmit={handleAddClient} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">公司名稱</label>
+                <input required type="text" className="w-full border rounded-lg p-2" value={newClientForm.name} onChange={e => setNewClientForm({ ...newClientForm, name: e.target.value })} placeholder="例如：台積電三廠" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">統一編號</label>
+                <input required type="text" className="w-full border rounded-lg p-2" value={newClientForm.taxId} onChange={e => setNewClientForm({ ...newClientForm, taxId: e.target.value })} placeholder="8碼統編" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">目前階段</label>
+                <select className="w-full border rounded-lg p-2" value={newClientForm.status} onChange={e => setNewClientForm({ ...newClientForm, status: e.target.value })}>
+                  <option value="規劃階段">規劃階段</option>
+                  <option value="試車階段">試車階段</option>
+                  <option value="營運中">營運中</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">下一步動作</label>
+                <input type="text" className="w-full border rounded-lg p-2" value={newClientForm.nextAction} onChange={e => setNewClientForm({ ...newClientForm, nextAction: e.target.value })} placeholder="例如：送審計畫書" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">期限</label>
+                <input type="date" className="w-full border rounded-lg p-2" value={newClientForm.deadline} onChange={e => setNewClientForm({ ...newClientForm, deadline: e.target.value })} />
+              </div>
+              <button type="submit" className="w-full bg-teal-600 text-white py-3 rounded-lg font-bold hover:bg-teal-700 transition mt-4">
+                建立案件
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* 編輯客戶 Modal */}
+      {editingClient && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4" onClick={() => setEditingClient(null)}>
+          <div className="bg-white rounded-2xl p-6 max-w-md w-full shadow-2xl" onClick={e => e.stopPropagation()}>
+            <div className="flex justify-between items-center mb-6">
+              <div>
+                <h3 className="text-xl font-bold text-gray-800">✏️ 更新進度</h3>
+                <p className="text-sm text-gray-500">{editingClient.name}</p>
+              </div>
+              <button onClick={() => setEditingClient(null)} className="text-gray-400 hover:text-gray-600">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <form onSubmit={handleUpdateClient} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">變更階段</label>
+                <select className="w-full border rounded-lg p-2" value={editingClient.status} onChange={e => setEditingClient({ ...editingClient, status: e.target.value })}>
+                  <option value="規劃階段">規劃階段</option>
+                  <option value="試車階段">試車階段</option>
+                  <option value="營運中">營運中</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">下一步動作</label>
+                <input type="text" className="w-full border rounded-lg p-2" value={editingClient.nextAction} onChange={e => setEditingClient({ ...editingClient, nextAction: e.target.value })} />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">截止期限</label>
+                <input type="date" className="w-full border rounded-lg p-2" value={editingClient.deadline} onChange={e => setEditingClient({ ...editingClient, deadline: e.target.value })} />
+              </div>
+              <div className="pt-4 border-t border-gray-100 flex gap-2">
+                <button type="button" onClick={() => setEditingClient(null)} className="flex-1 bg-gray-100 text-gray-600 py-3 rounded-lg font-bold hover:bg-gray-200 transition">
+                  取消
+                </button>
+                <button type="submit" className="flex-1 bg-blue-600 text-white py-3 rounded-lg font-bold hover:bg-blue-700 transition flex items-center justify-center gap-2">
+                  <Save className="w-4 h-4" /> 儲存變更
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
