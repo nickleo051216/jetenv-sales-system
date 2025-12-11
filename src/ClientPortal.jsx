@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { mockClientDatabase } from './data/clients';
 import { ComplianceView, RegulationLibraryView } from './SharedViews';
-import { Search, Phone, FileText, CheckCircle, AlertTriangle, XCircle, Wind, Droplets, Trash2, Skull, ArrowRight, Calendar, BarChart3, Activity, LayoutDashboard, BookOpen, Menu, X, Mail, MessageCircle, Globe } from 'lucide-react';
+import { Search, Phone, FileText, CheckCircle, AlertTriangle, XCircle, Wind, Droplets, Trash2, Skull, ArrowRight, Calendar, BarChart3, Activity, LayoutDashboard, BookOpen, Menu, X, Mail, MessageCircle, Globe, ChevronDown, ChevronUp } from 'lucide-react';
 
 // License Card Component
 const LicenseCard = ({ type, data }) => {
@@ -90,6 +90,76 @@ const ClientNavigation = ({ activeTab, setActiveTab, isMobile, setMenuOpen }) =>
     );
 };
 
+// Mobile-friendly Accordion Flowchart
+const MobileFlowchart = () => {
+    const [openStage, setOpenStage] = useState(null);
+
+    const stages = [
+        {
+            id: 'soil',
+            title: '🌍 土壤 (Soil)',
+            color: 'amber',
+            steps: ['土壤前置作業', '現場篩測/檢測', '📄 土壤評估報告']
+        },
+        {
+            id: 'water',
+            title: '💧 廢水 (Water)',
+            color: 'blue',
+            steps: ['廢水前置作業', '廢水工程規劃', '📄 水措計畫書提送 (關鍵！)', '🚧 廢水工程完工', '試車計畫書', '⚙️ 試車', '🏆 排放許可證 (5年)']
+        },
+        {
+            id: 'air',
+            title: '💨 空氣 (Air)',
+            color: 'purple',
+            steps: ['空氣前置作業', '空氣工程規劃', '📄 設置許可提送 (關鍵！)', '🚧 空氣工程完工', '操作許可第一階段', '⚙️ 試車', '🏆 操作許可證 (5年)']
+        }
+    ];
+
+    return (
+        <div className="space-y-3">
+            <div className="bg-slate-800 text-white px-6 py-3 rounded-lg text-center font-bold mb-4">
+                ✍️ 簽約啟動
+            </div>
+
+            {stages.map((stage) => (
+                <div key={stage.id} className="border-2 border-gray-200 rounded-lg overflow-hidden">
+                    <button
+                        onClick={() => setOpenStage(openStage === stage.id ? null : stage.id)}
+                        className={`w-full p-4 flex items-center justify-between font-bold text-left transition ${stage.color === 'amber' ? 'bg-amber-50 hover:bg-amber-100' :
+                                stage.color === 'blue' ? 'bg-blue-50 hover:bg-blue-100' :
+                                    'bg-purple-50 hover:bg-purple-100'
+                            }`}
+                    >
+                        <span className="text-lg">{stage.title}</span>
+                        {openStage === stage.id ? <ChevronUp /> : <ChevronDown />}
+                    </button>
+                    {openStage === stage.id && (
+                        <div className="p-4 bg-white space-y-2">
+                            {stage.steps.map((step, idx) => (
+                                <div key={idx} className={`p-3 rounded border ${step.includes('關鍵') ? 'bg-red-50 border-red-300 font-bold text-red-800' :
+                                        step.includes('🏆') ? 'bg-green-100 border-green-400 font-bold text-green-900' :
+                                            step.includes('⚙️') ? 'bg-yellow-50 border-yellow-300' :
+                                                'bg-gray-50 border-gray-200'
+                                    }`}>
+                                    {step}
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                </div>
+            ))}
+
+            <div className="bg-slate-100 text-slate-600 px-6 py-3 rounded-lg text-center font-bold mt-4">
+                🏛️ 環保局審件 & 工廠登記
+            </div>
+
+            <div className="bg-slate-700 text-white px-6 py-3 rounded-lg text-center font-bold mt-4">
+                🔚 廢清書提送 (結案)
+            </div>
+        </div>
+    );
+};
+
 const ClientPortal = () => {
     const [searchParams] = useSearchParams();
     const navigate = useNavigate();
@@ -99,6 +169,7 @@ const ClientPortal = () => {
     const [activeTab, setActiveTab] = useState('dashboard');
     const [isMobile, setIsMobile] = useState(false);
     const [menuOpen, setMenuOpen] = useState(false);
+    const [officerCardOpen, setOfficerCardOpen] = useState(false);
 
     // Deep Linking: Auto-login if ?id=... exists
     useEffect(() => {
@@ -182,50 +253,57 @@ const ClientPortal = () => {
         <div className="min-h-screen bg-gray-50 font-sans text-slate-800 flex flex-col">
             <header className="bg-white shadow-sm sticky top-0 z-50">
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-                    {/* Company Info & Enhanced Officer Card - Senior Friendly */}
-                    <div className="flex flex-col gap-4 mb-4">
-                        <div>
-                            <h1 className="text-2xl font-black text-gray-900">{searchResult.name}</h1>
-                            <p className="text-sm text-gray-500">統編：{searchResult.taxId}</p>
+                    {/* Company Info */}
+                    <div className="flex flex-col gap-3 mb-4">
+                        <div className="flex justify-between items-start">
+                            <div>
+                                <h1 className="text-2xl font-black text-gray-900">{searchResult.name}</h1>
+                                <p className="text-sm text-gray-500">統編：{searchResult.taxId}</p>
+                            </div>
+                            <button onClick={() => { setSearchResult(null); setHasSearched(false); setInputTaxId(''); }} className="px-4 py-2 bg-gray-200 rounded-lg text-sm hover:bg-gray-300 transition font-bold">
+                                查詢其他統編
+                            </button>
                         </div>
 
-                        {/* Super Clear Officer Contact Card */}
-                        <div className="bg-gradient-to-r from-blue-50 to-teal-50 p-6 rounded-2xl border-2 border-blue-300 shadow-lg">
-                            <div className="flex flex-col md:flex-row items-start md:items-center gap-6">
-                                {/* Officer Info */}
-                                <div className="flex items-center gap-4">
-                                    <div className={`w-16 h-16 rounded-full ${searchResult.officer.avatarColor} flex items-center justify-center text-white text-2xl font-bold shadow-lg ring-4 ring-white`}>
+                        {/* Collapsible Officer Card */}
+                        <div className="border-2 border-blue-200 rounded-xl overflow-hidden">
+                            <button
+                                onClick={() => setOfficerCardOpen(!officerCardOpen)}
+                                className="w-full bg-gradient-to-r from-blue-50 to-teal-50 p-4 flex items-center justify-between transition hover:from-blue-100 hover:to-teal-100"
+                            >
+                                <div className="flex items-center gap-3">
+                                    <div className={`w-12 h-12 rounded-full ${searchResult.officer.avatarColor} flex items-center justify-center text-white text-lg font-bold shadow-md`}>
                                         {searchResult.officer.name[0]}
                                     </div>
-                                    <div>
-                                        <p className="text-sm text-gray-600 font-bold">📞 您的專屬承辦人</p>
-                                        <p className="text-2xl font-black text-gray-900">{searchResult.officer.name}</p>
-                                        <p className="text-base text-gray-700 font-medium">{searchResult.officer.title}</p>
+                                    <div className="text-left">
+                                        <p className="text-xs text-gray-600 font-bold">📞 專屬承辦人</p>
+                                        <p className="text-lg font-black text-gray-900">{searchResult.officer.name}</p>
                                     </div>
                                 </div>
-
-                                {/* Large Contact Buttons */}
-                                <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto">
-                                    <a href={`tel:${searchResult.officer.phone}`} className="flex items-center justify-center gap-3 bg-green-600 hover:bg-green-700 text-white px-6 py-4 rounded-xl shadow-lg transition font-bold text-lg">
-                                        <Phone size={24} />
-                                        <div className="text-left">
-                                            <div className="text-xs opacity-90">直接撥打</div>
-                                            <div className="font-mono">{searchResult.officer.phone}</div>
-                                        </div>
-                                    </a>
-                                    <a href="https://lin.ee/mTFxpvM" target="_blank" rel="noopener noreferrer" className="flex items-center justify-center gap-3 bg-green-500 hover:bg-green-600 text-white px-6 py-4 rounded-xl shadow-lg transition font-bold text-lg">
-                                        <MessageCircle size={24} />
-                                        <span>Line 諮詢</span>
-                                    </a>
-                                    <a href="https://www.jetenv.com.tw" target="_blank" rel="noopener noreferrer" className="flex items-center justify-center gap-3 bg-blue-600 hover:bg-blue-700 text-white px-6 py-4 rounded-xl shadow-lg transition font-bold text-lg">
-                                        <Globe size={24} />
-                                        <span>公司官網</span>
-                                    </a>
-                                </div>
-                            </div>
-                            <button onClick={() => { setSearchResult(null); setHasSearched(false); setInputTaxId(''); }} className="mt-4 px-4 py-2 bg-white/80 hover:bg-white rounded-lg text-sm font-bold text-gray-700 hover:text-gray-900 transition border border-gray-300">
-                                🔍 查詢其他公司統編
+                                {officerCardOpen ? <ChevronUp className="text-gray-600" /> : <ChevronDown className="text-gray-600" />}
                             </button>
+
+                            {officerCardOpen && (
+                                <div className="bg-white p-4 border-t border-blue-200">
+                                    <div className="flex flex-col sm:flex-row gap-3">
+                                        <a href={`tel:${searchResult.officer.phone}`} className="flex items-center justify-center gap-3 bg-green-600 hover:bg-green-700 text-white px-6 py-3 rounded-xl shadow-lg transition font-bold">
+                                            <Phone size={20} />
+                                            <div className="text-left">
+                                                <div className="text-xs opacity-90">直接撥打</div>
+                                                <div className="font-mono text-sm">{searchResult.officer.phone}</div>
+                                            </div>
+                                        </a>
+                                        <a href="https://lin.ee/mTFxpvM" target="_blank" rel="noopener noreferrer" className="flex items-center justify-center gap-2 bg-green-500 hover:bg-green-600 text-white px-6 py-3 rounded-xl shadow-lg transition font-bold">
+                                            <MessageCircle size={20} />
+                                            <span>Line 諮詢</span>
+                                        </a>
+                                        <a href="https://www.jetenv.com.tw" target="_blank" rel="noopener noreferrer" className="flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-xl shadow-lg transition font-bold">
+                                            <Globe size={20} />
+                                            <span>公司官網</span>
+                                        </a>
+                                    </div>
+                                </div>
+                            )}
                         </div>
                     </div>
 
@@ -364,9 +442,14 @@ const ClientPortal = () => {
                                 業務保命口訣：先拿「設置/水措」才能蓋，蓋完「試車」免罰款，最後拿「許可」才能營運。
                             </p>
 
-                            {/* Flowchart with horizontal scroll for mobile */}
-                            <div className="overflow-x-auto">
+                            {/* Mobile: Accordion, Desktop: Full Diagram */}
+                            <div className="md:hidden">
+                                <MobileFlowchart />
+                            </div>
+
+                            <div className="hidden md:block overflow-x-auto">
                                 <div className="relative p-4 min-w-[800px]">
+                                    {/* Full desktop flowchart - same as before */}
                                     <div className="flex justify-center mb-8">
                                         <div className="bg-slate-800 text-white px-8 py-3 rounded-lg shadow-lg font-bold border-l-4 border-teal-400">
                                             ✍️ 簽約啟動
@@ -411,7 +494,7 @@ const ClientPortal = () => {
                                             <div className="h-4 border-l-2 border-dashed border-gray-300"></div>
                                             <div className="w-full bg-white border border-gray-300 p-3 rounded text-sm shadow-sm">空氣工程規劃</div>
                                             <div className="h-4 border-l-2 border-dashed border-gray-300"></div>
-                                            <div className="w-full bg-red-50 border border-red-400 p-3 rounded text-sm font-bold text-red-800 shadow-md relative group cursor-pointer">
+                                            <div className="w-full bg-red-50 border-red-400 p-3 rounded text-sm font-bold text-red-800 shadow-md relative group cursor-pointer">
                                                 📄 設置許可提送
                                                 <div className="absolute hidden group-hover:block bottom-full left-1/2 transform -translate-x-1/2 w-48 bg-slate-800 text-white text-xs p-2 rounded mb-2 z-20 shadow-lg">
                                                     關鍵點：拿到這張證才能開始安裝設備！
