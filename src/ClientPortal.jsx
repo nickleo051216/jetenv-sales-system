@@ -182,41 +182,50 @@ const ClientPortal = () => {
         <div className="min-h-screen bg-gray-50 font-sans text-slate-800 flex flex-col">
             <header className="bg-white shadow-sm sticky top-0 z-50">
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-                    {/* Company Info & Enhanced Officer Card */}
-                    <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 mb-4">
+                    {/* Company Info & Enhanced Officer Card - Senior Friendly */}
+                    <div className="flex flex-col gap-4 mb-4">
                         <div>
                             <h1 className="text-2xl font-black text-gray-900">{searchResult.name}</h1>
                             <p className="text-sm text-gray-500">統編：{searchResult.taxId}</p>
                         </div>
 
-                        {/* Enhanced Officer Contact Card */}
-                        <div className="flex items-center gap-6 bg-gradient-to-r from-blue-50 to-teal-50 p-4 rounded-xl border border-blue-200 shadow-sm">
-                            <div className="flex items-center gap-3">
-                                <div className={`w-12 h-12 rounded-full ${searchResult.officer.avatarColor} flex items-center justify-center text-white text-lg font-bold shadow-md`}>
-                                    {searchResult.officer.name[0]}
+                        {/* Super Clear Officer Contact Card */}
+                        <div className="bg-gradient-to-r from-blue-50 to-teal-50 p-6 rounded-2xl border-2 border-blue-300 shadow-lg">
+                            <div className="flex flex-col md:flex-row items-start md:items-center gap-6">
+                                {/* Officer Info */}
+                                <div className="flex items-center gap-4">
+                                    <div className={`w-16 h-16 rounded-full ${searchResult.officer.avatarColor} flex items-center justify-center text-white text-2xl font-bold shadow-lg ring-4 ring-white`}>
+                                        {searchResult.officer.name[0]}
+                                    </div>
+                                    <div>
+                                        <p className="text-sm text-gray-600 font-bold">📞 您的專屬承辦人</p>
+                                        <p className="text-2xl font-black text-gray-900">{searchResult.officer.name}</p>
+                                        <p className="text-base text-gray-700 font-medium">{searchResult.officer.title}</p>
+                                    </div>
                                 </div>
-                                <div>
-                                    <p className="text-xs text-gray-500 font-bold">您的專屬承辦人</p>
-                                    <p className="text-lg font-black text-gray-900">{searchResult.officer.name}</p>
-                                    <p className="text-xs text-gray-600">{searchResult.officer.title}</p>
-                                </div>
-                            </div>
 
-                            {/* Contact Methods */}
-                            <div className="flex gap-2">
-                                <a href={`tel:${searchResult.officer.phone}`} className="p-2 bg-green-600 hover:bg-green-700 text-white rounded-lg shadow transition" title="撥打電話">
-                                    <Phone size={16} />
-                                </a>
-                                <a href="https://lin.ee/mTFxpvM" target="_blank" rel="noopener noreferrer" className="p-2 bg-green-500 hover:bg-green-600 text-white rounded-lg shadow transition" title="Line 官方帳號">
-                                    <MessageCircle size={16} />
-                                </a>
-                                <a href="https://www.jetenv.com.tw" target="_blank" rel="noopener noreferrer" className="p-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg shadow transition" title="公司官網">
-                                    <Globe size={16} />
-                                </a>
-                                <button onClick={() => { setSearchResult(null); setHasSearched(false); setInputTaxId(''); }} className="px-3 py-2 bg-gray-200 rounded-lg text-xs hover:bg-gray-300 transition font-bold">
-                                    其他統編
-                                </button>
+                                {/* Large Contact Buttons */}
+                                <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto">
+                                    <a href={`tel:${searchResult.officer.phone}`} className="flex items-center justify-center gap-3 bg-green-600 hover:bg-green-700 text-white px-6 py-4 rounded-xl shadow-lg transition font-bold text-lg">
+                                        <Phone size={24} />
+                                        <div className="text-left">
+                                            <div className="text-xs opacity-90">直接撥打</div>
+                                            <div className="font-mono">{searchResult.officer.phone}</div>
+                                        </div>
+                                    </a>
+                                    <a href="https://lin.ee/mTFxpvM" target="_blank" rel="noopener noreferrer" className="flex items-center justify-center gap-3 bg-green-500 hover:bg-green-600 text-white px-6 py-4 rounded-xl shadow-lg transition font-bold text-lg">
+                                        <MessageCircle size={24} />
+                                        <span>Line 諮詢</span>
+                                    </a>
+                                    <a href="https://www.jetenv.com.tw" target="_blank" rel="noopener noreferrer" className="flex items-center justify-center gap-3 bg-blue-600 hover:bg-blue-700 text-white px-6 py-4 rounded-xl shadow-lg transition font-bold text-lg">
+                                        <Globe size={24} />
+                                        <span>公司官網</span>
+                                    </a>
+                                </div>
                             </div>
+                            <button onClick={() => { setSearchResult(null); setHasSearched(false); setInputTaxId(''); }} className="mt-4 px-4 py-2 bg-white/80 hover:bg-white rounded-lg text-sm font-bold text-gray-700 hover:text-gray-900 transition border border-gray-300">
+                                🔍 查詢其他公司統編
+                            </button>
                         </div>
                     </div>
 
@@ -345,20 +354,121 @@ const ClientPortal = () => {
                 )}
 
                 {activeTab === 'flowchart' && (
-                    <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
-                        <h2 className="text-xl font-bold text-gray-800 mb-2 flex items-center">
-                            <Activity className="w-5 h-5 mr-2 text-teal-600" />
-                            {searchResult.name} - 案件流程全貌
-                        </h2>
-                        <p className="text-sm text-gray-500 mb-6">
-                            以下
+                    <div className="space-y-6 animate-fade-in">
+                        <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+                            <h2 className="text-xl font-bold text-gray-800 mb-2 flex items-center">
+                                <Activity className="w-5 h-5 mr-2 text-teal-600" />
+                                案件流程全貌 (傑太標準作業)
+                            </h2>
+                            <p className="text-sm text-gray-500 mb-6">
+                                業務保命口訣：先拿「設置/水措」才能蓋，蓋完「試車」免罰款，最後拿「許可」才能營運。
+                            </p>
 
-                            是貴公司環保案件的完整流程圖，從簽約到結案的每一個關鍵步驟。
-                        </p>
-                        <div className="text-center text-gray-500 py-12 bg-gray-50 rounded-lg">
-                            <Activity className="w-16 h-16 mx-auto mb-4 text-gray-300" />
-                            <p className="text-lg font-medium">客製化流程圖即將上線</p>
-                            <p className="text-sm mt-2">目前請參考「申報行事曆」與「法規資料庫」了解相關規定</p>
+                            {/* Flowchart with horizontal scroll for mobile */}
+                            <div className="overflow-x-auto">
+                                <div className="relative p-4 min-w-[800px]">
+                                    <div className="flex justify-center mb-8">
+                                        <div className="bg-slate-800 text-white px-8 py-3 rounded-lg shadow-lg font-bold border-l-4 border-teal-400">
+                                            ✍️ 簽約啟動
+                                        </div>
+                                    </div>
+
+                                    <div className="grid grid-cols-3 gap-8 text-center relative">
+                                        {/* Soil */}
+                                        <div className="flex flex-col items-center space-y-4">
+                                            <span className="bg-amber-100 text-amber-800 px-4 py-1 rounded-full text-xs font-bold">🌍 土壤 (Soil)</span>
+                                            <div className="w-full bg-amber-50 border border-amber-200 p-3 rounded text-sm">土壤前置作業</div>
+                                            <div className="h-4 border-l-2 border-dashed border-gray-300"></div>
+                                            <div className="w-full bg-white border border-gray-300 p-3 rounded text-sm shadow-sm">現場篩測/檢測</div>
+                                            <div className="h-4 border-l-2 border-dashed border-gray-300"></div>
+                                            <div className="w-full bg-amber-100 border border-amber-400 p-3 rounded text-sm font-bold text-amber-900 shadow-md">
+                                                📄 土壤評估報告
+                                            </div>
+                                        </div>
+                                        {/* Water */}
+                                        <div className="flex flex-col items-center space-y-4">
+                                            <span className="bg-blue-100 text-blue-800 px-4 py-1 rounded-full text-xs font-bold">💧 廢水 (Water)</span>
+                                            <div className="w-full bg-blue-50 border border-blue-200 p-3 rounded text-sm">廢水前置作業</div>
+                                            <div className="h-4 border-l-2 border-dashed border-gray-300"></div>
+                                            <div className="w-full bg-white border border-gray-300 p-3 rounded text-sm shadow-sm">廢水工程規劃</div>
+                                            <div className="h-4 border-l-2 border-dashed border-gray-300"></div>
+                                            <div className="w-full bg-red-50 border border-red-400 p-3 rounded text-sm font-bold text-red-800 shadow-md relative group cursor-pointer">
+                                                📄 水措計畫書提送
+                                                <div className="absolute hidden group-hover:block bottom-full left-1/2 transform -translate-x-1/2 w-48 bg-slate-800 text-white text-xs p-2 rounded mb-2 z-20 shadow-lg">
+                                                    關鍵點：拿到這張核准函才能動工！
+                                                    <div className="absolute top-full left-1/2 transform -translate-x-1/2 border-4 border-transparent border-t-slate-800"></div>
+                                                </div>
+                                                <div className="absolute top-0 right-0 -mt-2 -mr-2 flex h-3 w-3">
+                                                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                                                    <span className="relative inline-flex rounded-full h-3 w-3 bg-red-500"></span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        {/* Air */}
+                                        <div className="flex flex-col items-center space-y-4">
+                                            <span className="bg-purple-100 text-purple-800 px-4 py-1 rounded-full text-xs font-bold">💨 空氣 (Air)</span>
+                                            <div className="w-full bg-purple-50 border border-purple-200 p-3 rounded text-sm">空氣前置作業</div>
+                                            <div className="h-4 border-l-2 border-dashed border-gray-300"></div>
+                                            <div className="w-full bg-white border border-gray-300 p-3 rounded text-sm shadow-sm">空氣工程規劃</div>
+                                            <div className="h-4 border-l-2 border-dashed border-gray-300"></div>
+                                            <div className="w-full bg-red-50 border border-red-400 p-3 rounded text-sm font-bold text-red-800 shadow-md relative group cursor-pointer">
+                                                📄 設置許可提送
+                                                <div className="absolute hidden group-hover:block bottom-full left-1/2 transform -translate-x-1/2 w-48 bg-slate-800 text-white text-xs p-2 rounded mb-2 z-20 shadow-lg">
+                                                    關鍵點：拿到這張證才能開始安裝設備！
+                                                    <div className="absolute top-full left-1/2 transform -translate-x-1/2 border-4 border-transparent border-t-slate-800"></div>
+                                                </div>
+                                                <div className="absolute top-0 right-0 -mt-2 -mr-2 flex h-3 w-3">
+                                                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                                                    <span className="relative inline-flex rounded-full h-3 w-3 bg-red-500"></span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div className="my-8 flex items-center justify-center">
+                                        <div className="bg-slate-100 text-slate-600 px-12 py-2 rounded-full text-sm font-bold border border-slate-200">
+                                            🏛️ 環保局審件 & 工廠登記
+                                        </div>
+                                    </div>
+
+                                    <div className="grid grid-cols-2 gap-8 text-center mt-4">
+                                        <div className="flex flex-col items-center space-y-4 border-r border-gray-100 pr-4">
+                                            <div className="w-3/4 bg-blue-100 border border-blue-300 p-3 rounded text-sm font-medium">🚧 廢水工程完工</div>
+                                            <div className="text-gray-400 text-xs">⬇</div>
+                                            <div className="w-3/4 bg-white border border-gray-300 p-3 rounded text-sm">試車計畫書</div>
+                                            <div className="text-gray-400 text-xs">⬇</div>
+                                            <div className="w-3/4 bg-yellow-50 border border-yellow-300 p-3 rounded text-sm font-bold text-yellow-800">
+                                                ⚙️ 試車 (數據可波動)
+                                            </div>
+                                            <div className="text-gray-400 text-xs">⬇</div>
+                                            <div className="w-3/4 bg-green-100 border border-green-500 p-3 rounded text-sm font-bold text-green-900 shadow-md">
+                                                🏆 排放許可證 (5年)
+                                            </div>
+                                        </div>
+                                        <div className="flex flex-col items-center space-y-4 pl-4 relative">
+                                            <div className="absolute right-0 top-10 w-32 bg-purple-50 border border-purple-200 text-xs p-2 rounded text-purple-800">
+                                                ☠️ 毒化物申請
+                                            </div>
+                                            <div className="w-3/4 bg-purple-100 border border-purple-300 p-3 rounded text-sm font-medium">🚧 空氣工程完工</div>
+                                            <div className="text-gray-400 text-xs">⬇</div>
+                                            <div className="w-3/4 bg-white border border-gray-300 p-3 rounded text-sm">操作許可第一階段</div>
+                                            <div className="text-gray-400 text-xs">⬇</div>
+                                            <div className="w-3/4 bg-yellow-50 border border-yellow-300 p-3 rounded text-sm font-bold text-yellow-800">
+                                                ⚙️ 試車 (數據可波動)
+                                            </div>
+                                            <div className="text-gray-400 text-xs">⬇</div>
+                                            <div className="w-3/4 bg-green-100 border border-green-500 p-3 rounded text-sm font-bold text-green-900 shadow-md">
+                                                🏆 操作許可證 (5年)
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div className="mt-8 flex justify-center">
+                                        <div className="bg-slate-700 text-white px-8 py-3 rounded-lg font-bold text-sm">
+                                            🔚 廢清書提送 (結案)
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 )}
