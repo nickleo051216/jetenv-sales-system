@@ -6,26 +6,48 @@ export default async function handler(req, res) {
     }
 
     try {
-        const apiUrl = `http://data.gcis.nat.gov.tw/od/data/api/5F64D864-61CB-4D0D-8AD9-492047CC1EA6?$format=json&$filter=Business_Accounting_NO eq ${taxId}&$skip=0&$top=1`;
+        // API 1: 基本資料（目前使用中）
+        const basicUrl = `http://data.gcis.nat.gov.tw/od/data/api/5F64D864-61CB-4D0D-8AD9-492047CC1EA6?$format=json&$filter=Business_Accounting_NO eq ${taxId}&$skip=0&$top=1`;
 
-        const response = await fetch(apiUrl);
-        if (!response.ok) {
-            throw new Error(`MOEA API Error: ${response.status}`);
+        // API 2: 登記項目資料（營業項目）
+        const businessItemsUrl = `http://data.gcis.nat.gov.tw/od/data/api/426D5542-71FC-4547-9C54-30BDFE20C2CA?$format=json&$filter=Business_Accounting_NO eq ${taxId}`;
+
+        // 同時查詢兩個 API
+        const [basicRes, itemsRes] = await Promise.all([
+            fetch(basicUrl),
+            fetch(businessItemsUrl)
+        ]);
+
+        if (!basicRes.ok) {
+            throw new Error(`MOEA API Error: ${basicRes.status}`);
         }
 
-        const data = await response.json();
+        const basicData = await basicRes.json();
 
-        // Return null if no data found (empty array)
-        if (!data || data.length === 0) {
+        // 如果基本資料查無結果
+        if (!basicData || basicData.length === 0) {
             return res.status(200).json({ found: false });
         }
 
-        // Return the first match
-        const company = data[0];
+        const company = basicData[0];
 
-        // Format the data for easier consumption
-        // Note: MOEA API may use different field names for business items
-        const businessItems = company.Cmp_Business || company.Business_Item || [];
+        // 查詢營業項目（可能失敗，不影響主流程）
+        let businessItems = [];
+        try {
+            if (itemsRes.ok) {
+                const itemsData = await itemsRes.json();
+                businessItems = Array.isArray(itemsData) ? itemsData : [];
+            }
+        } catch (err) {
+            console.warn('Failed to fetch business items:', err);
+        }
+
+        // 格式化營業項目
+        const industryStats = businessItems.map(item => {
+            const code = item.Business_Seq_NO || '';
+            const name = item.Business_Item || item.Business_Item_Desc || '';
+            return `${code} ${name}`.trim();
+        }).filter(item => item.length > 0);
 
         const formattedData = {
             taxId: company.Business_Accounting_NO,
@@ -35,9 +57,7 @@ export default async function handler(req, res) {
             address: company.Company_Location,
             capital: company.Capital_Stock_Amount,
             organizationType: company.Company_Setup_Date ? 'Company' : 'Business',
-            industryStats: Array.isArray(businessItems)
-                ? businessItems.map(item => `${item.Business_Seq_NO || ''} ${item.Business_Item || item.Business_Item_Desc || ''}`.trim())
-                : []
+            industryStats: industryStats
         };
 
         return res.status(200).json({
