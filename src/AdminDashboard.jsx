@@ -301,9 +301,9 @@ const ClientView = () => {
       if (clientError) throw clientError;
 
       // 2. 更新委託項目 (Diffing: 找出新增與刪除的項目)
-      // 取得原始的 types (從 licenses 陣列)
-      const originalTypes = editInfoClient.licenses.map(l => l.type);
-      const newTypes = editInfoClient.licenseTypes || [];
+      // 取得原始的 types (從 licenses 陣列，轉為小寫)
+      const originalTypes = editInfoClient.licenses.map(l => l.type.toLowerCase());
+      const newTypes = (editInfoClient.licenseTypes || []).map(t => t.toLowerCase());
 
       // 找出要新增的
       const toAdd = newTypes.filter(t => !originalTypes.includes(t));
