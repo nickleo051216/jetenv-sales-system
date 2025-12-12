@@ -195,6 +195,49 @@ const ClientView = () => {
         if (licenses.soil) autoSelectedLicenses.push('soil');
 
         formData.licenseTypes = autoSelectedLicenses;
+
+        // 📅 自動設定期限（根據換證年份）
+        if (factoryInfo.renewalYear) {
+          try {
+            // 解析換證年份格式：117.02, 11702, 116.11, 11610 等
+            const renewalYear = factoryInfo.renewalYear.toString();
+            let rocYear, month;
+
+            if (renewalYear.includes('.')) {
+              // 格式：117.02 或 116.11
+              const parts = renewalYear.split('.');
+              rocYear = parseInt(parts[0]);
+              month = parseInt(parts[1]);
+            } else {
+              // 格式：11702 或 11610
+              if (renewalYear.length === 5) {
+                rocYear = parseInt(renewalYear.substring(0, 3));
+                month = parseInt(renewalYear.substring(3));
+              } else if (renewalYear.length === 4) {
+                rocYear = parseInt(renewalYear.substring(0, 2));
+                month = parseInt(renewalYear.substring(2));
+              }
+            }
+
+            // 驗證月份有效性
+            if (rocYear && month && month >= 1 && month <= 12) {
+              // 轉換為西元年
+              const adYear = rocYear + 1911;
+
+              // 計算該月最後一天
+              const lastDay = new Date(adYear, month, 0).getDate();
+
+              // 格式化為 YYYY-MM-DD
+              const deadline = `${adYear}-${String(month).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+              formData.deadline = deadline;
+
+              console.log(`📅 換證年份 ${renewalYear} → 期限 ${deadline}`);
+            }
+          } catch (err) {
+            console.warn('⚠️ 換證年份解析失敗:', err);
+          }
+        }
+
         setFactoryData(factoryResult); // 儲存完整工廠資料
       }
 
@@ -227,6 +270,9 @@ const ClientView = () => {
         };
         const selectedLabels = autoSelectedLicenses.map(l => licenseLabels[l]).join('、');
         message += `\n已自動勾選委託項目：${selectedLabels}`;
+      }
+      if (formData.deadline) {
+        message += `\n📅 已自動設定期限：${formData.deadline}`;
       }
 
       alert(message);
