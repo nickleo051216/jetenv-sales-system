@@ -28,7 +28,8 @@ import {
   Save,
   Edit3,
   Plus,
-  Zap
+  Zap,
+  Trash2
 } from 'lucide-react';
 
 // --- Client List Data ---
