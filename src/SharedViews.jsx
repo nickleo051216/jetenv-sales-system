@@ -22,9 +22,15 @@ export const FlowchartView = () => {
         currentMonth: new Date().getMonth() + 1,
         expiringLicenses: 0
     });
+    const [isMobile, setIsMobile] = useState(false);
+    const [openStage, setOpenStage] = useState(null);
 
     useEffect(() => {
         fetchStats();
+        const checkMobile = () => setIsMobile(window.innerWidth < 768);
+        checkMobile();
+        window.addEventListener('resize', checkMobile);
+        return () => window.removeEventListener('resize', checkMobile);
     }, []);
 
     const fetchStats = async () => {
@@ -85,109 +91,188 @@ export const FlowchartView = () => {
                     業務保命口訣：先拿「設置/水措」才能蓋，蓋完「試車」免罰款，最後拿「許可」才能營運。
                 </p>
 
-                {/* Flowchart Diagram */}
-                <div className="relative overflow-x-auto p-4 min-w-[800px]">
-                    <div className="flex justify-center mb-8">
-                        <div className="bg-slate-800 text-white px-8 py-3 rounded-lg shadow-lg font-bold border-l-4 border-teal-400">
-                            ✍️ 簽約啟動
+                {/* 手機版:折疊式 */}
+                {isMobile ? (
+                    <div className="space-y-3">
+                        <div className="bg-slate-800 text-white px-6 py-3 rounded-lg text-center font-bold mb-4">
+                            ✒️ 簽約啟動
                         </div>
-                    </div>
 
-                    <div className="grid grid-cols-3 gap-8 text-center relative">
-                        {/* Soil */}
-                        <div className="flex flex-col items-center space-y-4">
-                            <span className="bg-amber-100 text-amber-800 px-4 py-1 rounded-full text-xs font-bold">🌍 土壤 (Soil)</span>
-                            <div className="w-full bg-amber-50 border border-amber-200 p-3 rounded text-sm">土壤前置作業</div>
-                            <div className="h-4 border-l-2 border-dashed border-gray-300"></div>
-                            <div className="w-full bg-white border border-gray-300 p-3 rounded text-sm shadow-sm">現場篩測/檢測</div>
-                            <div className="h-4 border-l-2 border-dashed border-gray-300"></div>
-                            <div className="w-full bg-amber-100 border border-amber-400 p-3 rounded text-sm font-bold text-amber-900 shadow-md">
-                                📄 土壤評估報告
-                            </div>
+                        {/* 土壤階段 */}
+                        <div className="border-2 border-gray-200 rounded-lg overflow-hidden">
+                            <button
+                                onClick={() => setOpenStage(openStage === 'soil' ? null : 'soil')}
+                                className="w-full p-4 flex items-center justify-between font-bold text-left transition bg-amber-50 hover:bg-amber-100"
+                            >
+                                <span className="text-lg">🌍 土壤 (Soil)</span>
+                                <ChevronDown className={`transform transition-transform ${openStage === 'soil' ? 'rotate-180' : ''}`} />
+                            </button>
+                            {openStage === 'soil' && (
+                                <div className="p-4 bg-white space-y-2">
+                                    <div className="p-3 rounded border bg-gray-50 border-gray-200">土壤前置作業</div>
+                                    <div className="p-3 rounded border bg-gray-50 border-gray-200">現場篩測/檢測</div>
+                                    <div className="p-3 rounded border bg-amber-100 border-amber-400 font-bold text-amber-900">📄 土壤評估報告</div>
+                                </div>
+                            )}
                         </div>
-                        {/* Water */}
-                        <div className="flex flex-col items-center space-y-4">
-                            <span className="bg-blue-100 text-blue-800 px-4 py-1 rounded-full text-xs font-bold">💧 廢水 (Water)</span>
-                            <div className="w-full bg-blue-50 border border-blue-200 p-3 rounded text-sm">廢水前置作業</div>
-                            <div className="h-4 border-l-2 border-dashed border-gray-300"></div>
-                            <div className="w-full bg-white border border-gray-300 p-3 rounded text-sm shadow-sm">廢水工程規劃</div>
-                            <div className="h-4 border-l-2 border-dashed border-gray-300"></div>
-                            <div className="w-full bg-red-50 border border-red-400 p-3 rounded text-sm font-bold text-red-800 shadow-md relative group cursor-pointer">
-                                📄 水措計畫書提送
-                                <div className="absolute hidden group-hover:block bottom-full left-1/2 transform -translate-x-1/2 w-48 bg-slate-800 text-white text-xs p-2 rounded mb-2 z-20 shadow-lg transition-opacity duration-200">
-                                    關鍵點：拿到這張核准函才能動工！
-                                    <div className="absolute top-full left-1/2 transform -translate-x-1/2 border-4 border-transparent border-t-slate-800"></div>
-                                </div>
-                                <div className="absolute top-0 right-0 -mt-2 -mr-2 flex h-3 w-3">
-                                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
-                                    <span className="relative inline-flex rounded-full h-3 w-3 bg-red-500"></span>
-                                </div>
-                            </div>
-                        </div>
-                        {/* Air */}
-                        <div className="flex flex-col items-center space-y-4">
-                            <span className="bg-purple-100 text-purple-800 px-4 py-1 rounded-full text-xs font-bold">💨 空氣 (Air)</span>
-                            <div className="w-full bg-purple-50 border border-purple-200 p-3 rounded text-sm">空氣前置作業</div>
-                            <div className="h-4 border-l-2 border-dashed border-gray-300"></div>
-                            <div className="w-full bg-white border border-gray-300 p-3 rounded text-sm shadow-sm">空氣工程規劃</div>
-                            <div className="h-4 border-l-2 border-dashed border-gray-300"></div>
-                            <div className="w-full bg-red-50 border border-red-400 p-3 rounded text-sm font-bold text-red-800 shadow-md relative group cursor-pointer">
-                                📄 設置許可提送
-                                <div className="absolute hidden group-hover:block bottom-full left-1/2 transform -translate-x-1/2 w-48 bg-slate-800 text-white text-xs p-2 rounded mb-2 z-20 shadow-lg transition-opacity duration-200">
-                                    關鍵點：拿到這張證才能開始安裝設備！
-                                    <div className="absolute top-full left-1/2 transform -translate-x-1/2 border-4 border-transparent border-t-slate-800"></div>
-                                </div>
-                                <div className="absolute top-0 right-0 -mt-2 -mr-2 flex h-3 w-3">
-                                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
-                                    <span className="relative inline-flex rounded-full h-3 w-3 bg-red-500"></span>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
 
-                    <div className="my-8 flex items-center justify-center">
-                        <div className="bg-slate-100 text-slate-600 px-12 py-2 rounded-full text-sm font-bold border border-slate-200">
+                        {/* 廢水階段 */}
+                        <div className="border-2 border-gray-200 rounded-lg overflow-hidden">
+                            <button
+                                onClick={() => setOpenStage(openStage === 'water' ? null : 'water')}
+                                className="w-full p-4 flex items-center justify-between font-bold text-left transition bg-blue-50 hover:bg-blue-100"
+                            >
+                                <span className="text-lg">💧 廢水 (Water)</span>
+                                <ChevronDown className={`transform transition-transform ${openStage === 'water' ? 'rotate-180' : ''}`} />
+                            </button>
+                            {openStage === 'water' && (
+                                <div className="p-4 bg-white space-y-2">
+                                    <div className="p-3 rounded border bg-gray-50 border-gray-200">廢水前置作業</div>
+                                    <div className="p-3 rounded border bg-gray-50 border-gray-200">廢水工程規劃</div>
+                                    <div className="p-3 rounded border bg-red-50 border-red-300 font-bold text-red-800">📄 水措計畫書提送 (關鍵！)</div>
+                                    <div className="p-3 rounded border bg-gray-50 border-gray-200">🚧 廢水工程完工</div>
+                                    <div className="p-3 rounded border bg-gray-50 border-gray-200">試車計畫書</div>
+                                    <div className="p-3 rounded border bg-yellow-50 border-yellow-300 font-bold text-yellow-800">⚙️ 試車 (數據可波動)</div>
+                                    <div className="p-3 rounded border bg-green-100 border-green-400 font-bold text-green-900">🏆 排放許可證 (5年)</div>
+                                </div>
+                            )}
+                        </div>
+
+                        {/* 空氣階段 */}
+                        <div className="border-2 border-gray-200 rounded-lg overflow-hidden">
+                            <button
+                                onClick={() => setOpenStage(openStage === 'air' ? null : 'air')}
+                                className="w-full p-4 flex items-center justify-between font-bold text-left transition bg-purple-50 hover:bg-purple-100"
+                            >
+                                <span className="text-lg">💨 空氣 (Air)</span>
+                                <ChevronDown className={`transform transition-transform ${openStage === 'air' ? 'rotate-180' : ''}`} />
+                            </button>
+                            {openStage === 'air' && (
+                                <div className="p-4 bg-white space-y-2">
+                                    <div className="p-3 rounded border bg-gray-50 border-gray-200">空氣前置作業</div>
+                                    <div className="p-3 rounded border bg-gray-50 border-gray-200">空氣工程規劃</div>
+                                    <div className="p-3 rounded border bg-red-50 border-red-300 font-bold text-red-800">📄 設置許可提送 (關鍵！)</div>
+                                    <div className="p-3 rounded border bg-gray-50 border-gray-200">🚧 空氣工程完工</div>
+                                    <div className="p-3 rounded border bg-gray-50 border-gray-200">操作許可第一階段</div>
+                                    <div className="p-3 rounded border bg-yellow-50 border-yellow-300 font-bold text-yellow-800">⚙️ 試車 (數據可波動)</div>
+                                    <div className="p-3 rounded border bg-green-100 border-green-400 font-bold text-green-900">🏆 操作許可證 (5年)</div>
+                                </div>
+                            )}
+                        </div>
+
+                        <div className="bg-slate-100 text-slate-600 px-6 py-3 rounded-lg text-center font-bold border border-slate-200 mt-4">
                             🏛️ 環保局審件 & 工廠登記
                         </div>
-                    </div>
 
-                    <div className="grid grid-cols-2 gap-8 text-center mt-4">
-                        <div className="flex flex-col items-center space-y-4 border-r border-gray-100 pr-4">
-                            <div className="w-3/4 bg-blue-100 border border-blue-300 p-3 rounded text-sm font-medium">🚧 廢水工程完工</div>
-                            <div className="text-gray-400 text-xs">⬇</div>
-                            <div className="w-3/4 bg-white border border-gray-300 p-3 rounded text-sm">試車計畫書</div>
-                            <div className="text-gray-400 text-xs">⬇</div>
-                            <div className="w-3/4 bg-yellow-50 border border-yellow-300 p-3 rounded text-sm font-bold text-yellow-800">
-                                ⚙️ 試車 (數據可波動)
-                            </div>
-                            <div className="text-gray-400 text-xs">⬇</div>
-                            <div className="w-3/4 bg-green-100 border border-green-500 p-3 rounded text-sm font-bold text-green-900 shadow-md">
-                                🏆 排放許可證 (5年)
-                            </div>
-                        </div>
-                        <div className="flex flex-col items-center space-y-4 pl-4 relative">
-                            <div className="absolute right-0 top-10 w-32 bg-purple-50 border border-purple-200 text-xs p-2 rounded text-purple-800">
-                                ☠️ 毒化物申請
-                            </div>
-                            <div className="w-3/4 bg-purple-100 border border-purple-300 p-3 rounded text-sm font-medium">🚧 空氣工程完工</div>
-                            <div className="text-gray-400 text-xs">⬇</div>
-                            <div className="w-3/4 bg-white border border-gray-300 p-3 rounded text-sm">操作許可第一階段</div>
-                            <div className="text-gray-400 text-xs">⬇</div>
-                            <div className="w-3/4 bg-yellow-50 border border-yellow-300 p-3 rounded text-sm font-bold text-yellow-800">
-                                ⚙️ 試車 (數據可波動)
-                            </div>
-                            <div className="text-gray-400 text-xs">⬇</div>
-                            <div className="w-3/4 bg-green-100 border border-green-500 p-3 rounded text-sm font-bold text-green-900 shadow-md">
-                                🏆 操作許可證 (5年)
-                            </div>
-                        </div>
-                    </div>
-                    <div className="mt-8 flex justify-center">
-                        <div className="bg-slate-700 text-white px-8 py-3 rounded-lg font-bold text-sm">
+                        <div className="bg-slate-700 text-white px-6 py-3 rounded-lg text-center font-bold mt-4">
                             🔚 廢清書提送 (結案)
                         </div>
                     </div>
-                </div>
+                ) : (
+                    /* 桌面版:原始流程圖 */
+                    <div className="relative overflow-x-auto p-4 min-w-[800px]">
+                        <div className="flex justify-center mb-8">
+                            <div className="bg-slate-800 text-white px-8 py-3 rounded-lg shadow-lg font-bold border-l-4 border-teal-400">
+                                ✍️ 簽約啟動
+                            </div>
+                        </div>
+
+                        <div className="grid grid-cols-3 gap-8 text-center relative">
+                            {/* Soil */}
+                            <div className="flex flex-col items-center space-y-4">
+                                <span className="bg-amber-100 text-amber-800 px-4 py-1 rounded-full text-xs font-bold">🌍 土壤 (Soil)</span>
+                                <div className="w-full bg-amber-50 border border-amber-200 p-3 rounded text-sm">土壤前置作業</div>
+                                <div className="h-4 border-l-2 border-dashed border-gray-300"></div>
+                                <div className="w-full bg-white border border-gray-300 p-3 rounded text-sm shadow-sm">現場篩測/檢測</div>
+                                <div className="h-4 border-l-2 border-dashed border-gray-300"></div>
+                                <div className="w-full bg-amber-100 border border-amber-400 p-3 rounded text-sm font-bold text-amber-900 shadow-md">
+                                    📄 土壤評估報告
+                                </div>
+                            </div>
+                            {/* Water */}
+                            <div className="flex flex-col items-center space-y-4">
+                                <span className="bg-blue-100 text-blue-800 px-4 py-1 rounded-full text-xs font-bold">💧 廢水 (Water)</span>
+                                <div className="w-full bg-blue-50 border border-blue-200 p-3 rounded text-sm">廢水前置作業</div>
+                                <div className="h-4 border-l-2 border-dashed border-gray-300"></div>
+                                <div className="w-full bg-white border border-gray-300 p-3 rounded text-sm shadow-sm">廢水工程規劃</div>
+                                <div className="h-4 border-l-2 border-dashed border-gray-300"></div>
+                                <div className="w-full bg-red-50 border border-red-400 p-3 rounded text-sm font-bold text-red-800 shadow-md relative group cursor-pointer">
+                                    📄 水措計畫書提送
+                                    <div className="absolute hidden group-hover:block bottom-full left-1/2 transform -translate-x-1/2 w-48 bg-slate-800 text-white text-xs p-2 rounded mb-2 z-20 shadow-lg transition-opacity duration-200">
+                                        關鍵點：拿到這張核准函才能動工！
+                                        <div className="absolute top-full left-1/2 transform -translate-x-1/2 border-4 border-transparent border-t-slate-800"></div>
+                                    </div>
+                                    <div className="absolute top-0 right-0 -mt-2 -mr-2 flex h-3 w-3">
+                                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                                        <span className="relative inline-flex rounded-full h-3 w-3 bg-red-500"></span>
+                                    </div>
+                                </div>
+                            </div>
+                            {/* Air */}
+                            <div className="flex flex-col items-center space-y-4">
+                                <span className="bg-purple-100 text-purple-800 px-4 py-1 rounded-full text-xs font-bold">💨 空氣 (Air)</span>
+                                <div className="w-full bg-purple-50 border border-purple-200 p-3 rounded text-sm">空氣前置作業</div>
+                                <div className="h-4 border-l-2 border-dashed border-gray-300"></div>
+                                <div className="w-full bg-white border border-gray-300 p-3 rounded text-sm shadow-sm">空氣工程規劃</div>
+                                <div className="h-4 border-l-2 border-dashed border-gray-300"></div>
+                                <div className="w-full bg-red-50 border border-red-400 p-3 rounded text-sm font-bold text-red-800 shadow-md relative group cursor-pointer">
+                                    📄 設置許可提送
+                                    <div className="absolute hidden group-hover:block bottom-full left-1/2 transform -translate-x-1/2 w-48 bg-slate-800 text-white text-xs p-2 rounded mb-2 z-20 shadow-lg transition-opacity duration-200">
+                                        關鍵點：拿到這張證才能開始安裝設備！
+                                        <div className="absolute top-full left-1/2 transform -translate-x-1/2 border-4 border-transparent border-t-slate-800"></div>
+                                    </div>
+                                    <div className="absolute top-0 right-0 -mt-2 -mr-2 flex h-3 w-3">
+                                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                                        <span className="relative inline-flex rounded-full h-3 w-3 bg-red-500"></span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="my-8 flex items-center justify-center">
+                            <div className="bg-slate-100 text-slate-600 px-12 py-2 rounded-full text-sm font-bold border border-slate-200">
+                                🏛️ 環保局審件 & 工廠登記
+                            </div>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-8 text-center mt-4">
+                            <div className="flex flex-col items-center space-y-4 border-r border-gray-100 pr-4">
+                                <div className="w-3/4 bg-blue-100 border border-blue-300 p-3 rounded text-sm font-medium">🚧 廢水工程完工</div>
+                                <div className="text-gray-400 text-xs">⬇</div>
+                                <div className="w-3/4 bg-white border border-gray-300 p-3 rounded text-sm">試車計畫書</div>
+                                <div className="text-gray-400 text-xs">⬇</div>
+                                <div className="w-3/4 bg-yellow-50 border border-yellow-300 p-3 rounded text-sm font-bold text-yellow-800">
+                                    ⚙️ 試車 (數據可波動)
+                                </div>
+                                <div className="text-gray-400 text-xs">⬇</div>
+                                <div className="w-3/4 bg-green-100 border border-green-500 p-3 rounded text-sm font-bold text-green-900 shadow-md">
+                                    🏆 排放許可證 (5年)
+                                </div>
+                            </div>
+                            <div className="flex flex-col items-center space-y-4 pl-4 relative">
+                                <div className="absolute right-0 top-10 w-32 bg-purple-50 border border-purple-200 text-xs p-2 rounded text-purple-800">
+                                    ☠️ 毒化物申請
+                                </div>
+                                <div className="w-3/4 bg-purple-100 border border-purple-300 p-3 rounded text-sm font-medium">🚧 空氣工程完工</div>
+                                <div className="text-gray-400 text-xs">⬇</div>
+                                <div className="w-3/4 bg-white border border-gray-300 p-3 rounded text-sm">操作許可第一階段</div>
+                                <div className="text-gray-400 text-xs">⬇</div>
+                                <div className="w-3/4 bg-yellow-50 border border-yellow-300 p-3 rounded text-sm font-bold text-yellow-800">
+                                    ⚙️ 試車 (數據可波動)
+                                </div>
+                                <div className="text-gray-400 text-xs">⬇</div>
+                                <div className="w-3/4 bg-green-100 border border-green-500 p-3 rounded text-sm font-bold text-green-900 shadow-md">
+                                    🏆 操作許可證 (5年)
+                                </div>
+                            </div>
+                        </div>
+                        <div className="mt-8 flex justify-center">
+                            <div className="bg-slate-700 text-white px-8 py-3 rounded-lg font-bold text-sm">
+                                🔚 廢清書提送 (結案)
+                            </div>
+                        </div>
+                    </div>
+                )}
             </div>
         </div>
     );
