@@ -87,6 +87,7 @@ const ClientView = () => {
   // Modal states
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [editingClient, setEditingClient] = useState(null);
+  const [moeaData, setMoeaData] = useState(null); // 經濟部資料
   const [newClientForm, setNewClientForm] = useState({
     name: '',
     taxId: '',
@@ -157,7 +158,8 @@ const ClientView = () => {
           ...prev,
           name: company.name
         }));
-        alert(`🎉 成功帶入資料：\n公司名稱：${company.name}\n代表人：${company.representative}\n營業項目：${company.industryStats[0] || '無'}`);
+        setMoeaData(company); // 儲存完整資料
+        alert(`🎉 成功帶入資料！`);
       } else {
         alert('❌ 找不到此統編資料，請確認是否輸入正確。');
       }
@@ -371,6 +373,32 @@ const ClientView = () => {
                 <label className="block text-sm font-medium text-gray-700 mb-1">公司名稱</label>
                 <input required type="text" className="w-full border rounded-lg p-2" value={newClientForm.name} onChange={e => setNewClientForm({ ...newClientForm, name: e.target.value })} placeholder="例如：台積電三廠" />
               </div>
+
+              {/* 經濟部資料卡片 */}
+              {moeaData && (
+                <div className="bg-gradient-to-r from-blue-50 to-purple-50 border border-blue-100 rounded-lg p-3 space-y-2">
+                  <div className="flex items-center gap-2 text-sm font-bold text-blue-800">
+                    <span>📋 經濟部登記資料</span>
+                    <span className={`px-2 py-0.5 rounded text-xs ${moeaData.status === '核准設立' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                      {moeaData.status}
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 text-xs text-gray-600">
+                    <div><span className="font-medium">代表人:</span> {moeaData.representative || '未知'}</div>
+                    <div><span className="font-medium">資本額:</span> {moeaData.capital ? Number(moeaData.capital).toLocaleString() : '未知'}</div>
+                  </div>
+                  {moeaData.address && (
+                    <div className="text-xs text-gray-500 truncate" title={moeaData.address}>
+                      📍 {moeaData.address}
+                    </div>
+                  )}
+                  {moeaData.industryStats && moeaData.industryStats.length > 0 && (
+                    <div className="text-xs text-purple-700 bg-purple-50 px-2 py-1 rounded truncate" title={moeaData.industryStats.join(', ')}>
+                      🏭 {moeaData.industryStats[0]}
+                    </div>
+                  )}
+                </div>
+              )}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">統一編號</label>
                 <div className="flex gap-2">
@@ -410,8 +438,8 @@ const ClientView = () => {
                         }
                       }}
                       className={`px-3 py-1.5 text-xs rounded-full border transition ${(newClientForm.licenseTypes || []).includes(item.key)
-                          ? `bg-${item.color}-100 text-${item.color}-700 border-${item.color}-300 ring-2 ring-${item.color}-200`
-                          : 'bg-gray-50 text-gray-500 border-gray-200 hover:bg-gray-100'
+                        ? `bg-${item.color}-100 text-${item.color}-700 border-${item.color}-300 ring-2 ring-${item.color}-200`
+                        : 'bg-gray-50 text-gray-500 border-gray-200 hover:bg-gray-100'
                         }`}
                     >
                       {item.label}

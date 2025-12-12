@@ -24,6 +24,9 @@ export default async function handler(req, res) {
         const company = data[0];
 
         // Format the data for easier consumption
+        // Note: MOEA API may use different field names for business items
+        const businessItems = company.Cmp_Business || company.Business_Item || [];
+
         const formattedData = {
             taxId: company.Business_Accounting_NO,
             name: company.Company_Name,
@@ -32,7 +35,9 @@ export default async function handler(req, res) {
             address: company.Company_Location,
             capital: company.Capital_Stock_Amount,
             organizationType: company.Company_Setup_Date ? 'Company' : 'Business',
-            industryStats: company.Business_Item ? company.Business_Item.map(item => `${item.Business_Item_Code} ${item.Business_Item_Desc}`) : []
+            industryStats: Array.isArray(businessItems)
+                ? businessItems.map(item => `${item.Business_Seq_NO || ''} ${item.Business_Item || item.Business_Item_Desc || ''}`.trim())
+                : []
         };
 
         return res.status(200).json({
