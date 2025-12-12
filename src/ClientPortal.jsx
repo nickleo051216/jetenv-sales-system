@@ -413,15 +413,22 @@ const ClientPortal = () => {
                                 {/* 官方登記資料徽章 */}
                                 {officialData && (
                                     <div className="mt-2 text-xs flex flex-wrap gap-2">
-                                        <span className={`px-2 py-0.5 rounded border ${officialData.Company_Status_Desc === '核准設立' ? 'bg-green-50 border-green-200 text-green-700' : 'bg-red-50 border-red-200 text-red-700'}`}>
-                                            官方狀態: {officialData.Company_Status_Desc}
+                                        <span className={`px-2 py-0.5 rounded border ${officialData.status === '核准設立' ? 'bg-green-50 border-green-200 text-green-700' : 'bg-red-50 border-red-200 text-red-700'}`}>
+                                            官方狀態: {officialData.status || '未知'}
                                         </span>
                                         <span className="px-2 py-0.5 rounded border bg-blue-50 border-blue-200 text-blue-700">
-                                            資本額: {officialData.Capital_Stock_Amount}
+                                            資本額: {officialData.capital ? Number(officialData.capital).toLocaleString() : '未知'}
                                         </span>
-                                        <span className="px-2 py-0.5 rounded border bg-gray-50 border-gray-200 text-gray-600 truncate max-w-[200px]" title={officialData.Company_Location}>
-                                            📍 {officialData.Company_Location}
-                                        </span>
+                                        {officialData.address && (
+                                            <span className="px-2 py-0.5 rounded border bg-gray-50 border-gray-200 text-gray-600 truncate max-w-[200px]" title={officialData.address}>
+                                                📍 {officialData.address}
+                                            </span>
+                                        )}
+                                        {officialData.industryStats && officialData.industryStats.length > 0 && (
+                                            <span className="px-2 py-0.5 rounded border bg-purple-50 border-purple-200 text-purple-700 truncate max-w-[250px]" title={officialData.industryStats.join(', ')}>
+                                                🏭 {officialData.industryStats[0]}
+                                            </span>
+                                        )}
                                     </div>
                                 )}
                             </div>

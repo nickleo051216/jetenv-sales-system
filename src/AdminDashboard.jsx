@@ -92,7 +92,8 @@ const ClientView = () => {
     taxId: '',
     status: '規劃階段',
     nextAction: '',
-    deadline: ''
+    deadline: '',
+    licenseTypes: [] // 空氣, 廢水, 廢棄物, 毒化, 土壤
   });
 
   // 從 Supabase 讀取客戶資料
@@ -386,6 +387,37 @@ const ClientView = () => {
                   <option value="試車階段">試車階段</option>
                   <option value="營運中">營運中</option>
                 </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">委託項目 (可多選)</label>
+                <div className="flex flex-wrap gap-2">
+                  {[
+                    { key: 'air', label: '💨 空氣', color: 'purple' },
+                    { key: 'water', label: '💧 廢水', color: 'blue' },
+                    { key: 'waste', label: '🗑️ 廢棄物', color: 'amber' },
+                    { key: 'toxic', label: '☢️ 毒化', color: 'red' },
+                    { key: 'soil', label: '🌍 土壤', color: 'green' }
+                  ].map(item => (
+                    <button
+                      key={item.key}
+                      type="button"
+                      onClick={() => {
+                        const types = newClientForm.licenseTypes || [];
+                        if (types.includes(item.key)) {
+                          setNewClientForm({ ...newClientForm, licenseTypes: types.filter(t => t !== item.key) });
+                        } else {
+                          setNewClientForm({ ...newClientForm, licenseTypes: [...types, item.key] });
+                        }
+                      }}
+                      className={`px-3 py-1.5 text-xs rounded-full border transition ${(newClientForm.licenseTypes || []).includes(item.key)
+                          ? `bg-${item.color}-100 text-${item.color}-700 border-${item.color}-300 ring-2 ring-${item.color}-200`
+                          : 'bg-gray-50 text-gray-500 border-gray-200 hover:bg-gray-100'
+                        }`}
+                    >
+                      {item.label}
+                    </button>
+                  ))}
+                </div>
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">下一步動作</label>
