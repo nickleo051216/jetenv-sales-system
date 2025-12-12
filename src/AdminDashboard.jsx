@@ -361,7 +361,7 @@ const ClientView = () => {
       {/* 新增客戶 Modal */}
       {isAddModalOpen && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4" onClick={() => setIsAddModalOpen(false)}>
-          <div className="bg-white rounded-2xl p-6 max-w-md w-full shadow-2xl" onClick={e => e.stopPropagation()}>
+          <div className="bg-white rounded-2xl p-6 max-w-md w-full shadow-2xl max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
             <div className="flex justify-between items-center mb-6">
               <h3 className="text-xl font-bold text-gray-800">📋 新增委託案件</h3>
               <button onClick={() => setIsAddModalOpen(false)} className="text-gray-400 hover:text-gray-600">
@@ -392,9 +392,13 @@ const ClientView = () => {
                       📍 {moeaData.address}
                     </div>
                   )}
-                  {moeaData.industryStats && moeaData.industryStats.length > 0 && (
+                  {moeaData.industryStats && moeaData.industryStats.length > 0 ? (
                     <div className="text-xs text-purple-700 bg-purple-50 px-2 py-1 rounded truncate" title={moeaData.industryStats.join(', ')}>
-                      🏭 {moeaData.industryStats[0]}
+                      🏭 {moeaData.industryStats[0]} {moeaData.industryStats.length > 1 && `(+${moeaData.industryStats.length - 1})`}
+                    </div>
+                  ) : (
+                    <div className="text-xs text-gray-400 bg-gray-50 px-2 py-1 rounded">
+                      🏭 查無營業項目資料
                     </div>
                   )}
                 </div>
