@@ -225,6 +225,29 @@ const ClientView = () => {
     }
   };
 
+  // 刪除客戶
+  const handleDeleteClient = async (id, name) => {
+    if (!window.confirm(`⚠️ 確定要刪除「${name}」嗎？\n此動作無法復原！`)) return;
+
+    try {
+      setLoading(true);
+      const { error } = await supabase
+        .from('clients')
+        .delete()
+        .eq('id', id);
+
+      if (error) throw error;
+
+      alert('🗑️ 客戶已刪除');
+      fetchClients(); // 重新載入
+    } catch (error) {
+      console.error('刪除失敗:', error);
+      alert(`❌ 刪除失敗：${error.message}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const filteredClients = clients.filter(c =>
     c.name.includes(searchTerm) || c.status.includes(searchTerm)
   );
@@ -301,12 +324,21 @@ const ClientView = () => {
               </div>
             </div>
 
-            <button
-              onClick={() => setEditingClient(client)}
-              className="w-full mt-4 py-2 text-sm text-teal-600 font-medium border border-teal-200 rounded hover:bg-teal-50 transition-colors"
-            >
-              更新進度 →
-            </button>
+            <div className="flex gap-2 mt-4">
+              <button
+                onClick={() => setEditingClient(client)}
+                className="flex-1 py-2 text-sm text-teal-600 font-medium border border-teal-200 rounded hover:bg-teal-50 transition-colors"
+              >
+                更新進度 →
+              </button>
+              <button
+                onClick={() => handleDeleteClient(client.id, client.name)}
+                className="px-3 py-2 text-sm text-gray-400 border border-gray-200 rounded hover:bg-red-50 hover:text-red-600 hover:border-red-200 transition-colors"
+                title="刪除案件"
+              >
+                <Trash2 className="w-4 h-4" />
+              </button>
+            </div>
           </div>
         </div>
       ))}
