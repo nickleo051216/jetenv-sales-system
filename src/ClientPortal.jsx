@@ -351,7 +351,24 @@ const ClientPortal = () => {
                     </div>
                 </div>
 
-                {hasSearched && !searchResult && (
+                {/* Loading 狀態 */}
+                {isLoading && (
+                    <div className="text-center p-8 bg-white rounded-2xl shadow-lg">
+                        <div className="w-16 h-16 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin mx-auto mb-4"></div>
+                        <p className="text-xl font-bold text-gray-700">查詢中...</p>
+                    </div>
+                )}
+
+                {/* 錯誤訊息 */}
+                {error && (
+                    <div className="text-center p-8 bg-white rounded-2xl shadow-lg border-2 border-red-200">
+                        <XCircle className="mx-auto mb-4 text-red-500" size={64} />
+                        <p className="text-2xl font-bold text-red-700">{error}</p>
+                        <button onClick={() => { setError(null); setHasSearched(false); }} className="mt-6 bg-red-600 text-white px-6 py-2 rounded-lg hover:bg-red-700 transition">重新查詢</button>
+                    </div>
+                )}
+
+                {hasSearched && !searchResult && !isLoading && !error && (
                     <div className="text-center p-8 bg-white rounded-2xl shadow-lg">
                         <AlertTriangle className="mx-auto mb-4 text-orange-500" size={64} />
                         <p className="text-2xl font-bold text-gray-700">找不到此統編</p>
