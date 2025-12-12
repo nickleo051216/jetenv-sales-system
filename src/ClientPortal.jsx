@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { mockClientDatabase } from './data/clients';
 import { ComplianceView, RegulationLibraryView } from './SharedViews';
+import { supabase } from './supabaseClient';
 import { Search, Phone, FileText, CheckCircle, AlertTriangle, XCircle, Wind, Droplets, Trash2, Skull, ArrowRight, Calendar, BarChart3, Activity, LayoutDashboard, BookOpen, Menu, X, Mail, MessageCircle, Globe, ChevronDown, ChevronUp } from 'lucide-react';
 
 // License Card Component
@@ -126,8 +127,8 @@ const MobileFlowchart = () => {
                     <button
                         onClick={() => setOpenStage(openStage === stage.id ? null : stage.id)}
                         className={`w-full p-4 flex items-center justify-between font-bold text-left transition ${stage.color === 'amber' ? 'bg-amber-50 hover:bg-amber-100' :
-                                stage.color === 'blue' ? 'bg-blue-50 hover:bg-blue-100' :
-                                    'bg-purple-50 hover:bg-purple-100'
+                            stage.color === 'blue' ? 'bg-blue-50 hover:bg-blue-100' :
+                                'bg-purple-50 hover:bg-purple-100'
                             }`}
                     >
                         <span className="text-lg">{stage.title}</span>
@@ -137,9 +138,9 @@ const MobileFlowchart = () => {
                         <div className="p-4 bg-white space-y-2">
                             {stage.steps.map((step, idx) => (
                                 <div key={idx} className={`p-3 rounded border ${step.includes('關鍵') ? 'bg-red-50 border-red-300 font-bold text-red-800' :
-                                        step.includes('🏆') ? 'bg-green-100 border-green-400 font-bold text-green-900' :
-                                            step.includes('⚙️') ? 'bg-yellow-50 border-yellow-300' :
-                                                'bg-gray-50 border-gray-200'
+                                    step.includes('🏆') ? 'bg-green-100 border-green-400 font-bold text-green-900' :
+                                        step.includes('⚙️') ? 'bg-yellow-50 border-yellow-300' :
+                                            'bg-gray-50 border-gray-200'
                                     }`}>
                                     {step}
                                 </div>
@@ -170,17 +171,15 @@ const ClientPortal = () => {
     const [isMobile, setIsMobile] = useState(false);
     const [menuOpen, setMenuOpen] = useState(false);
     const [officerCardOpen, setOfficerCardOpen] = useState(false);
+    const [isLoading, setIsLoading] = useState(false);
+    const [error, setError] = useState(null);
 
     // Deep Linking: Auto-login if ?id=... exists
     useEffect(() => {
         const idFromUrl = searchParams.get('id');
         if (idFromUrl) {
             setInputTaxId(idFromUrl);
-            const result = mockClientDatabase.find(client => client.taxId === idFromUrl);
-            if (result) {
-                setSearchResult(result);
-                setHasSearched(true);
-            }
+            handleSearch(idFromUrl);
         }
     }, [searchParams]);
 
@@ -191,10 +190,133 @@ const ClientPortal = () => {
         return () => window.removeEventListener('resize', checkMobile);
     }, []);
 
-    const handleSearch = () => {
-        const result = mockClientDatabase.find(client => client.taxId === inputTaxId);
-        setSearchResult(result);
+    const handleSearch = async (taxIdToSearch) => {
+        const searchTaxId = taxIdToSearch || inputTaxId;
+        if (!searchTaxId) return;
+
+        setIsLoading(true);
+        setError(null);
         setHasSearched(true);
+
+        try {
+            // 從 Supabase 查詢客戶資料
+            const { data: client, error: clientError } = await supabase
+                .from('clients')
+                .select(`
+                    *,
+                    officer:officers(name, phone, title, avatar_color),
+                    licenses(*)
+                `)
+                .eq('tax_id', searchTaxId)
+                .single();
+
+            if (clientError) {
+                if (clientError.code === 'PGRST116') {
+                    // 找不到資料
+                    setSearchResult(null);
+                } else {
+                    throw clientError;
+                }
+                return;
+            }
+
+            if (!client) {
+                setSearchResult(null);
+                return;
+            }
+
+            // 轉換資料格式為前端需要的格式
+            const formattedResult = {
+                taxId: client.tax_id,
+                name: client.name,
+                officer: client.officer ? {
+                    name: client.officer.name,
+                    title: client.officer.title || '專案經理',
+                    phone: client.officer.phone,
+                    avatarColor: client.officer.avatar_color || 'bg-blue-600'
+                } : {
+                    name: '傑太團隊',
+                    title: '專案經理',
+                    phone: '(02)6609-5888',
+                    avatarColor: 'bg-blue-600'
+                },
+                projectInfo: {
+                    deadline: client.deadline || '待確認',
+                    progress: calculateProgress(client.licenses),
+                    status: determineProjectStatus(client.status)
+                },
+                licenses: formatLicenses(client.licenses),
+                tasks: [] // 如果有 tasks 表可以在這裡查詢
+            };
+
+            setSearchResult(formattedResult);
+        } catch (err) {
+            console.error('查詢失敗:', err);
+            setError('查詢時發生錯誤,請稍後再試');
+            setSearchResult(null);
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    // 輔助函式:計算進度
+    const calculateProgress = (licenses) => {
+        if (!licenses || licenses.length === 0) return 0;
+        const validLicenses = licenses.filter(l => l.status === 'valid').length;
+        return Math.round((validLicenses / licenses.length) * 100);
+    };
+
+    // 輔助函式:判斷專案階段
+    const determineProjectStatus = (status) => {
+        if (status === '營運中') return 'permission';
+        if (status === '試車階段') return 'trial';
+        return 'setup';
+    };
+
+    // 輔助函式:格式化許可證資料
+    const formatLicenses = (licenses) => {
+        const formatted = {
+            air: { status: 'none', date: '-', name: '固定污染源許可' },
+            water: { status: 'none', date: '-', name: '水污染防治許可' },
+            waste: { status: 'none', date: '-', name: '廢棄物清理計畫書' },
+            toxic: { status: 'none', date: '-', name: '毒化物運作核可' }
+        };
+
+        if (!licenses) return formatted;
+
+        licenses.forEach(license => {
+            const type = license.type;
+            if (formatted[type]) {
+                formatted[type] = {
+                    status: mapLicenseStatus(license.status, license.valid_until),
+                    date: license.valid_until || '長期有效',
+                    name: license.name,
+                    workflowStage: license.workflow_stage,
+                    nextAction: license.next_action,
+                    expectedDate: license.expected_date
+                };
+            }
+        });
+
+        return formatted;
+    };
+
+    // 輔助函式:映射許可證狀態
+    const mapLicenseStatus = (status, validUntil) => {
+        if (status === 'pending') return 'warning';
+        if (status === 'expired') return 'expired';
+        if (status === 'valid') {
+            // 檢查是否即將到期 (30天內)
+            if (validUntil) {
+                const daysUntilExpiry = Math.floor(
+                    (new Date(validUntil) - new Date()) / (1000 * 60 * 60 * 24)
+                );
+                if (daysUntilExpiry < 30 && daysUntilExpiry > 0) return 'warning';
+                if (daysUntilExpiry <= 0) return 'expired';
+            }
+            return 'normal';
+        }
+        return 'none';
     };
 
     // Search View
