@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { mockClientDatabase } from './data/clients';
 import { ComplianceView, RegulationLibraryView } from './SharedViews';
@@ -174,15 +174,6 @@ const ClientPortal = () => {
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState(null);
 
-    // Deep Linking: Auto-login if ?id=... exists
-    useEffect(() => {
-        const idFromUrl = searchParams.get('id');
-        if (idFromUrl) {
-            setInputTaxId(idFromUrl);
-            handleSearch(idFromUrl);
-        }
-    }, [searchParams]);
-
     useEffect(() => {
         const checkMobile = () => setIsMobile(window.innerWidth < 768);
         checkMobile();
@@ -190,7 +181,67 @@ const ClientPortal = () => {
         return () => window.removeEventListener('resize', checkMobile);
     }, []);
 
-    const handleSearch = async (taxIdToSearch) => {
+    // 輔助函式:計算進度
+    const calculateProgress = useCallback((licenses) => {
+        if (!licenses || licenses.length === 0) return 0;
+        const validLicenses = licenses.filter(l => l.status === 'valid').length;
+        return Math.round((validLicenses / licenses.length) * 100);
+    }, []);
+
+    // 輔助函式:判斷專案階段
+    const determineProjectStatus = useCallback((status) => {
+        if (status === '營運中') return 'permission';
+        if (status === '試車階段') return 'trial';
+        return 'setup';
+    }, []);
+
+    // 輔助函式:映射許可證狀態
+    const mapLicenseStatus = useCallback((status, validUntil) => {
+        if (status === 'pending') return 'warning';
+        if (status === 'expired') return 'expired';
+        if (status === 'valid') {
+            // 檢查是否即將到期 (30天內)
+            if (validUntil) {
+                const daysUntilExpiry = Math.floor(
+                    (new Date(validUntil) - new Date()) / (1000 * 60 * 60 * 24)
+                );
+                if (daysUntilExpiry < 30 && daysUntilExpiry > 0) return 'warning';
+                if (daysUntilExpiry <= 0) return 'expired';
+            }
+            return 'normal';
+        }
+        return 'none';
+    }, []);
+
+    // 輔助函式:格式化許可證資料
+    const formatLicenses = useCallback((licenses) => {
+        const formatted = {
+            air: { status: 'none', date: '-', name: '固定污染源許可' },
+            water: { status: 'none', date: '-', name: '水污染防治許可' },
+            waste: { status: 'none', date: '-', name: '廢棄物清理計畫書' },
+            toxic: { status: 'none', date: '-', name: '毒化物運作核可' }
+        };
+
+        if (!licenses) return formatted;
+
+        licenses.forEach(license => {
+            const type = license.type;
+            if (formatted[type]) {
+                formatted[type] = {
+                    status: mapLicenseStatus(license.status, license.valid_until),
+                    date: license.valid_until || '長期有效',
+                    name: license.name,
+                    workflowStage: license.workflow_stage,
+                    nextAction: license.next_action,
+                    expectedDate: license.expected_date
+                };
+            }
+        });
+
+        return formatted;
+    }, [mapLicenseStatus]);
+
+    const handleSearch = useCallback(async (taxIdToSearch) => {
         const searchTaxId = taxIdToSearch || inputTaxId;
         if (!searchTaxId) return;
 
@@ -257,67 +308,16 @@ const ClientPortal = () => {
         } finally {
             setIsLoading(false);
         }
-    };
+    }, [calculateProgress, determineProjectStatus, formatLicenses, inputTaxId]);
 
-    // 輔助函式:計算進度
-    const calculateProgress = (licenses) => {
-        if (!licenses || licenses.length === 0) return 0;
-        const validLicenses = licenses.filter(l => l.status === 'valid').length;
-        return Math.round((validLicenses / licenses.length) * 100);
-    };
-
-    // 輔助函式:判斷專案階段
-    const determineProjectStatus = (status) => {
-        if (status === '營運中') return 'permission';
-        if (status === '試車階段') return 'trial';
-        return 'setup';
-    };
-
-    // 輔助函式:格式化許可證資料
-    const formatLicenses = (licenses) => {
-        const formatted = {
-            air: { status: 'none', date: '-', name: '固定污染源許可' },
-            water: { status: 'none', date: '-', name: '水污染防治許可' },
-            waste: { status: 'none', date: '-', name: '廢棄物清理計畫書' },
-            toxic: { status: 'none', date: '-', name: '毒化物運作核可' }
-        };
-
-        if (!licenses) return formatted;
-
-        licenses.forEach(license => {
-            const type = license.type;
-            if (formatted[type]) {
-                formatted[type] = {
-                    status: mapLicenseStatus(license.status, license.valid_until),
-                    date: license.valid_until || '長期有效',
-                    name: license.name,
-                    workflowStage: license.workflow_stage,
-                    nextAction: license.next_action,
-                    expectedDate: license.expected_date
-                };
-            }
-        });
-
-        return formatted;
-    };
-
-    // 輔助函式:映射許可證狀態
-    const mapLicenseStatus = (status, validUntil) => {
-        if (status === 'pending') return 'warning';
-        if (status === 'expired') return 'expired';
-        if (status === 'valid') {
-            // 檢查是否即將到期 (30天內)
-            if (validUntil) {
-                const daysUntilExpiry = Math.floor(
-                    (new Date(validUntil) - new Date()) / (1000 * 60 * 60 * 24)
-                );
-                if (daysUntilExpiry < 30 && daysUntilExpiry > 0) return 'warning';
-                if (daysUntilExpiry <= 0) return 'expired';
-            }
-            return 'normal';
+    // Deep Linking: Auto-login if ?id=... exists
+    useEffect(() => {
+        const idFromUrl = searchParams.get('id');
+        if (idFromUrl) {
+            setInputTaxId(idFromUrl);
+            handleSearch(idFromUrl);
         }
-        return 'none';
-    };
+    }, [searchParams, handleSearch]);
 
     // Search View
     if (!searchResult) {
