@@ -27,7 +27,8 @@ import {
   Globe,
   Save,
   Edit3,
-  Plus
+  Plus,
+  Zap
 } from 'lucide-react';
 
 // --- Client List Data ---
@@ -131,6 +132,36 @@ const ClientView = () => {
       console.error('讀取客戶資料失敗:', error);
       // 如果失敗，使用備用資料
       setClients(initialClients);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // ⚡ Smart Add: 自動帶入經濟部資料
+  const handleAutoFill = async () => {
+    if (!newClientForm.taxId || newClientForm.taxId.length !== 8) {
+      alert('請先輸入正確的 8 碼統編');
+      return;
+    }
+
+    try {
+      setLoading(true); // 借用 loading state 顯示讀取中
+      const res = await fetch(`/api/moea?taxId=${newClientForm.taxId}`);
+      const data = await res.json();
+
+      if (data.found && data.data) {
+        const company = data.data;
+        setNewClientForm(prev => ({
+          ...prev,
+          name: company.name
+        }));
+        alert(`🎉 成功帶入資料：\n公司名稱：${company.name}\n代表人：${company.representative}\n營業項目：${company.industryStats[0] || '無'}`);
+      } else {
+        alert('❌ 找不到此統編資料，請確認是否輸入正確。');
+      }
+    } catch (err) {
+      console.error(err);
+      alert('自動帶入失敗，請稍後再試');
     } finally {
       setLoading(false);
     }
@@ -308,7 +339,12 @@ const ClientView = () => {
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">統一編號</label>
-                <input required type="text" className="w-full border rounded-lg p-2" value={newClientForm.taxId} onChange={e => setNewClientForm({ ...newClientForm, taxId: e.target.value })} placeholder="8碼統編" />
+                <div className="flex gap-2">
+                  <input required type="text" className="flex-1 border rounded-lg p-2" value={newClientForm.taxId} onChange={e => setNewClientForm({ ...newClientForm, taxId: e.target.value })} placeholder="8碼統編" maxLength={8} />
+                  <button type="button" onClick={handleAutoFill} className="bg-teal-100 text-teal-700 px-3 py-2 rounded-lg text-sm font-bold hover:bg-teal-200 transition flex items-center gap-1">
+                    <Zap className="w-4 h-4" /> 自動帶入
+                  </button>
+                </div>
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">目前階段</label>

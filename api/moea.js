@@ -21,9 +21,23 @@ export default async function handler(req, res) {
         }
 
         // Return the first match
+        const company = data[0];
+
+        // Format the data for easier consumption
+        const formattedData = {
+            taxId: company.Business_Accounting_NO,
+            name: company.Company_Name,
+            status: company.Company_Status_Desc,
+            representative: company.Responsible_Name,
+            address: company.Company_Location,
+            capital: company.Capital_Stock_Amount,
+            organizationType: company.Company_Setup_Date ? 'Company' : 'Business',
+            industryStats: company.Business_Item ? company.Business_Item.map(item => `${item.Business_Item_Code} ${item.Business_Item_Desc}`) : []
+        };
+
         return res.status(200).json({
             found: true,
-            data: data[0]
+            data: formattedData
         });
 
     } catch (error) {
