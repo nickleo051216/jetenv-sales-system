@@ -281,14 +281,16 @@ const ClientView = () => {
     }
   };
 
-  // 更新客戶基本資料 (名稱、統編)
+  // 更新客戶基本資料 (名稱、統編、委託項目)
   const handleUpdateClientInfo = async (e) => {
     e.preventDefault();
     if (!editInfoClient) return;
 
     try {
       setLoading(true);
-      const { error } = await supabase
+
+      // 1. 更新名稱與統編
+      const { error: clientError } = await supabase
         .from('clients')
         .update({
           name: editInfoClient.name,
@@ -296,9 +298,42 @@ const ClientView = () => {
         })
         .eq('id', editInfoClient.id);
 
-      if (error) throw error;
+      if (clientError) throw clientError;
 
-      alert('✅ 基本資料更新成功！');
+      // 2. 更新委託項目 (Diffing: 找出新增與刪除的項目)
+      // 取得原始的 types (從 licenses 陣列)
+      const originalTypes = editInfoClient.licenses.map(l => l.type);
+      const newTypes = editInfoClient.licenseTypes || [];
+
+      // 找出要新增的
+      const toAdd = newTypes.filter(t => !originalTypes.includes(t));
+      // 找出要刪除的
+      const toRemove = originalTypes.filter(t => !newTypes.includes(t));
+
+      // 執行新增
+      if (toAdd.length > 0) {
+        const licensesToInsert = toAdd.map(type => ({
+          client_id: editInfoClient.id,
+          type: type,
+          status: 'pending',
+          name: `${type.toUpperCase()} 許可證`,
+          workflow_stage: '規劃階段'
+        }));
+        const { error: addError } = await supabase.from('licenses').insert(licensesToInsert);
+        if (addError) throw addError;
+      }
+
+      // 執行刪除
+      if (toRemove.length > 0) {
+        const { error: removeError } = await supabase
+          .from('licenses')
+          .delete()
+          .eq('client_id', editInfoClient.id)
+          .in('type', toRemove);
+        if (removeError) throw removeError;
+      }
+
+      alert('✅ 客戶資料與委託項目更新成功！');
       setEditInfoClient(null);
       fetchClients();
     } catch (error) {
@@ -525,6 +560,7 @@ const ClientView = () => {
       )}
 
       {/* 編輯客戶 Modal */}
+      {/* 編輯客戶 Modal (更新進度) */}
       {editingClient && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4" onClick={() => setEditingClient(null)}>
           <div className="bg-white rounded-2xl p-6 max-w-md w-full shadow-2xl" onClick={e => e.stopPropagation()}>
@@ -533,7 +569,7 @@ const ClientView = () => {
                 <div className="flex items-center gap-2">
                   <h3 className="font-bold text-lg text-gray-800">{editingClient.name}</h3>
                   <button
-                    onClick={() => setEditInfoClient(editingClient)}
+                    onClick={() => setEditInfoClient({ ...editingClient, licenseTypes: editingClient.licenses.map(l => l.type) })}
                     className="text-gray-400 hover:text-blue-500 transition-colors p-1"
                     title="編輯基本資料"
                   >
@@ -577,6 +613,7 @@ const ClientView = () => {
           </div>
         </div>
       )}
+
       {/* 編輯客戶基本資料 Modal */}
       {editInfoClient && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4" onClick={() => setEditInfoClient(null)}>
@@ -596,6 +633,39 @@ const ClientView = () => {
                 <label className="block text-sm font-medium text-gray-700 mb-1">統一編號</label>
                 <input required type="text" className="w-full border rounded-lg p-2 font-mono" value={editInfoClient.taxId} onChange={e => setEditInfoClient({ ...editInfoClient, taxId: e.target.value })} maxLength={8} />
               </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">委託項目 (可多選)</label>
+                <div className="flex flex-wrap gap-2">
+                  {[
+                    { key: 'air', label: '💨 空氣', color: 'purple' },
+                    { key: 'water', label: '💧 廢水', color: 'blue' },
+                    { key: 'waste', label: '🗑️ 廢棄物', color: 'amber' },
+                    { key: 'toxic', label: '☢️ 毒化', color: 'red' },
+                    { key: 'soil', label: '🌍 土壤', color: 'green' }
+                  ].map(item => (
+                    <button
+                      key={item.key}
+                      type="button"
+                      onClick={() => {
+                        const types = editInfoClient.licenseTypes || [];
+                        if (types.includes(item.key)) {
+                          setEditInfoClient({ ...editInfoClient, licenseTypes: types.filter(t => t !== item.key) });
+                        } else {
+                          setEditInfoClient({ ...editInfoClient, licenseTypes: [...types, item.key] });
+                        }
+                      }}
+                      className={`px-3 py-1.5 text-xs rounded-full border transition ${(editInfoClient.licenseTypes || []).includes(item.key)
+                        ? `bg-${item.color}-100 text-${item.color}-700 border-${item.color}-300 ring-2 ring-${item.color}-200`
+                        : 'bg-gray-50 text-gray-500 border-gray-200 hover:bg-gray-100'
+                        }`}
+                    >
+                      {item.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
               <div className="pt-4 border-t border-gray-100 flex gap-2">
                 <button type="button" onClick={() => setEditInfoClient(null)} className="flex-1 bg-gray-100 text-gray-600 py-3 rounded-lg font-bold hover:bg-gray-200 transition">
                   取消
