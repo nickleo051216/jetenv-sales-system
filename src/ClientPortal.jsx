@@ -173,6 +173,7 @@ const ClientPortal = () => {
     const [officerCardOpen, setOfficerCardOpen] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState(null);
+    const [officialData, setOfficialData] = useState(null);
 
     useEffect(() => {
         const checkMobile = () => setIsMobile(window.innerWidth < 768);
@@ -275,6 +276,16 @@ const ClientPortal = () => {
                 setSearchResult(null);
                 return;
             }
+
+            // 同步查詢經濟部資料 (不阻擋主要流程)
+            fetch(`/api/moea?taxId=${searchTaxId}`)
+                .then(res => res.json())
+                .then(data => {
+                    if (data.found) {
+                        setOfficialData(data.data);
+                    }
+                })
+                .catch(err => console.error('Failed to fetch official data:', err));
 
             // 轉換資料格式為前端需要的格式
             const formattedResult = {
@@ -398,8 +409,23 @@ const ClientPortal = () => {
                             <div>
                                 <h1 className="text-2xl font-black text-gray-900">{searchResult.name}</h1>
                                 <p className="text-sm text-gray-500">統編：{searchResult.taxId}</p>
+
+                                {/* 官方登記資料徽章 */}
+                                {officialData && (
+                                    <div className="mt-2 text-xs flex flex-wrap gap-2">
+                                        <span className={`px-2 py-0.5 rounded border ${officialData.Company_Status_Desc === '核准設立' ? 'bg-green-50 border-green-200 text-green-700' : 'bg-red-50 border-red-200 text-red-700'}`}>
+                                            官方狀態: {officialData.Company_Status_Desc}
+                                        </span>
+                                        <span className="px-2 py-0.5 rounded border bg-blue-50 border-blue-200 text-blue-700">
+                                            資本額: {officialData.Capital_Stock_Amount}
+                                        </span>
+                                        <span className="px-2 py-0.5 rounded border bg-gray-50 border-gray-200 text-gray-600 truncate max-w-[200px]" title={officialData.Company_Location}>
+                                            📍 {officialData.Company_Location}
+                                        </span>
+                                    </div>
+                                )}
                             </div>
-                            <button onClick={() => { setSearchResult(null); setHasSearched(false); setInputTaxId(''); }} className="px-4 py-2 bg-gray-200 rounded-lg text-sm hover:bg-gray-300 transition font-bold">
+                            <button onClick={() => { setSearchResult(null); setHasSearched(false); setInputTaxId(''); setOfficialData(null); }} className="px-4 py-2 bg-gray-200 rounded-lg text-sm hover:bg-gray-300 transition font-bold">
                                 查詢其他統編
                             </button>
                         </div>
