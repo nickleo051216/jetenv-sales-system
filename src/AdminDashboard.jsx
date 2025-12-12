@@ -301,17 +301,34 @@ const ClientView = () => {
       if (clientError) throw clientError;
 
       // 2. 更新委託項目 (Diffing: 找出新增與刪除的項目)
-      // 取得原始的 types (從 licenses 陣列，轉為小寫)
-      const originalTypes = editInfoClient.licenses.map(l => l.type.toLowerCase());
-      const newTypes = (editInfoClient.licenseTypes || []).map(t => t.toLowerCase());
+      // 重要：Supabase 的 .in() 查詢是區分大小寫的！
+      // 所以我們要保留原始的大小寫來進行資料庫操作
 
-      console.log('🔍 Debug - 原始項目:', originalTypes);
-      console.log('🔍 Debug - 新項目:', newTypes);
+      // 建立小寫到原始值的映射
+      const originalTypesMap = {};
+      editInfoClient.licenses.forEach(l => {
+        originalTypesMap[l.type.toLowerCase()] = l.type;
+      });
 
-      // 找出要新增的
-      const toAdd = newTypes.filter(t => !originalTypes.includes(t));
-      // 找出要刪除的
-      const toRemove = originalTypes.filter(t => !newTypes.includes(t));
+      const newTypesMap = {};
+      (editInfoClient.licenseTypes || []).forEach(t => {
+        newTypesMap[t.toLowerCase()] = t;
+      });
+
+      const originalTypesLower = Object.keys(originalTypesMap);
+      const newTypesLower = Object.keys(newTypesMap);
+
+      console.log('🔍 Debug - 原始項目 (小寫):', originalTypesLower);
+      console.log('🔍 Debug - 原始項目 (原值):', originalTypesMap);
+      console.log('🔍 Debug - 新項目 (小寫):', newTypesLower);
+
+      // 找出要新增的 (使用小寫比對，但操作時用原始值)
+      const toAddLower = newTypesLower.filter(t => !originalTypesLower.includes(t));
+      const toAdd = toAddLower.map(t => newTypesMap[t]);
+
+      // 找出要刪除的 (使用小寫比對，但操作時用原始值)
+      const toRemoveLower = originalTypesLower.filter(t => !newTypesLower.includes(t));
+      const toRemove = toRemoveLower.map(t => originalTypesMap[t]);
 
       console.log('➕ Debug - 要新增:', toAdd);
       console.log('➖ Debug - 要刪除:', toRemove);
@@ -333,9 +350,9 @@ const ClientView = () => {
         }
       }
 
-      // 執行刪除
+      // 執行刪除 (使用原始的大小寫!)
       if (toRemove.length > 0) {
-        console.log('➖ 準備刪除 - Client ID:', editInfoClient.id, 'Types:', toRemove);
+        console.log('➖ 準備刪除 - Client ID:', editInfoClient.id, 'Types (原始大小寫):', toRemove);
 
         const { data: deletedData, error: removeError } = await supabase
           .from('licenses')
@@ -353,6 +370,8 @@ const ClientView = () => {
 
         if (!deletedData || deletedData.length === 0) {
           console.warn('⚠️ 警告：沒有刪除任何記錄，可能是因為找不到匹配的項目');
+        } else {
+          console.log('✅ 成功刪除', deletedData.length, '筆記錄');
         }
       }
 
