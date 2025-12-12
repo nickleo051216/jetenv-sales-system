@@ -177,7 +177,8 @@ const ClientView = () => {
     try {
       const phaseMap = { '規劃階段': 1, '試車階段': 2, '營運中': 3 };
 
-      const { data, error } = await supabase
+      // 1. 新增客戶資料
+      const { data: clientData, error: clientError } = await supabase
         .from('clients')
         .insert({
           tax_id: newClientForm.taxId,
@@ -190,11 +191,36 @@ const ClientView = () => {
         .select()
         .single();
 
-      if (error) throw error;
+      if (clientError) throw clientError;
 
-      alert('✅ 客戶新增成功！');
+      // 2. 如果有選取委託項目，新增到 licenses 表
+      if (newClientForm.licenseTypes && newClientForm.licenseTypes.length > 0) {
+        const licensesToInsert = newClientForm.licenseTypes.map(type => ({
+          client_id: clientData.id,
+          type: type, // 'air', 'water', etc.
+          status: '規劃中', // 預設狀態
+          authority: '環保局',
+          identifier: `${type.toUpperCase()}-${newClientForm.taxId.slice(-4)}` // 暫時產生一個假證號
+        }));
+
+        const { error: licenseError } = await supabase
+          .from('licenses')
+          .insert(licensesToInsert);
+
+        if (licenseError) throw licenseError;
+      }
+
+      alert('✅ 客戶及委託案件新增成功！');
       setIsAddModalOpen(false);
-      setNewClientForm({ name: '', taxId: '', status: '規劃階段', nextAction: '', deadline: '' });
+      setNewClientForm({
+        name: '',
+        taxId: '',
+        status: '規劃階段',
+        nextAction: '',
+        deadline: '',
+        licenseTypes: []
+      });
+      setMoeaData(null); // 清除暫存的經濟部資料
       fetchClients(); // 重新載入
     } catch (error) {
       console.error('新增客戶失敗:', error);
