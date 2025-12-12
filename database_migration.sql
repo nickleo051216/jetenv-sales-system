@@ -1,71 +1,151 @@
--- ============================================
--- 資料庫結構優化：增加流程階段追蹤
--- ============================================
+-- =====================================================
+-- 建立 factories 資料表（工廠資料庫）
+-- 用途：儲存從 Google Sheets 同步的工廠登記資料
+-- =====================================================
 
--- 1. 新增 workflow_stage 欄位到 licenses 表
-ALTER TABLE licenses 
-ADD COLUMN workflow_stage TEXT DEFAULT '規劃階段',
-ADD COLUMN next_action TEXT,
-ADD COLUMN expected_date DATE;
+-- 1. 建立資料表
+CREATE TABLE factories (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  
+  -- 基本識別資訊
+  emsno TEXT UNIQUE NOT NULL,           -- 工廠登記編號（主鍵）
+  uniformno TEXT,                        -- 統一編號（查詢用）
+  facilityname TEXT,                     -- 工廠名稱
+  
+  -- 地理資訊
+  county TEXT,                           -- 縣市
+  township TEXT,                         -- 鄉鎮區
+  facilityaddress TEXT,                  -- 工廠地址
+  industryareaname TEXT,                 -- 工業區名稱
+  
+  -- 產業資訊
+  industryid TEXT,                       -- 產業代號
+  industryname TEXT,                     -- 產業名稱（行業別）
+  
+  -- 委託項目標記（來自 Google Sheets）
+  isair BOOLEAN DEFAULT FALSE,           -- 空氣污染防制
+  iswater BOOLEAN DEFAULT FALSE,         -- 廢水處理
+  iswaste BOOLEAN DEFAULT FALSE,         -- 廢棄物清理
+  istoxic BOOLEAN DEFAULT FALSE,         -- 毒化物管理
+  issoil BOOLEAN DEFAULT FALSE,          -- 土壤污染
+  
+  -- 業務資訊
+  consultant_company TEXT,               -- 顧問公司
+  phone TEXT,                            -- 電話
+  renewal_year TEXT,                     -- 換證年
+  notes TEXT,                            -- 備註（可拜訪等）
+  
+  -- 資料來源與時間戳
+  data_source TEXT,                      -- 資料來源（新北市、台北市等）
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
 
--- 2. 更新現有資料（台積電範例廠）
-UPDATE licenses 
-SET 
-  workflow_stage = CASE 
-    WHEN type = 'air' THEN '環保局審查中'
-    WHEN type = 'water' THEN '試車執行中'
-    ELSE '正常營運'
-  END,
-  next_action = CASE
-    WHEN type = 'air' THEN '追蹤空污許可審查進度'
-    WHEN type = 'water' THEN '完成試車數據收集'
-    ELSE '定期申報作業'
-  END,
-  expected_date = CASE
-    WHEN type = 'air' THEN '2025-03-15'::date
-    WHEN type = 'water' THEN '2025-02-28'::date
-    ELSE NULL
-  END
-WHERE client_id IN (SELECT id FROM clients WHERE tax_id = '12345678');
+-- 2. 建立索引（加快查詢速度）
+CREATE INDEX idx_factories_uniformno ON factories(uniformno);
+CREATE INDEX idx_factories_county ON factories(county);
+CREATE INDEX idx_factories_industryname ON factories(industryname);
+CREATE INDEX idx_factories_consultant ON factories(consultant_company);
+CREATE INDEX idx_factories_renewal ON factories(renewal_year);
 
--- 3. 修改 status 欄位的含義
--- status 現在只表示「證照有效性」
--- pending: 申請中/還沒取得
--- valid: 有效
--- expiring: 即將到期
--- expired: 已過期
+-- 3. 啟用 RLS（Row Level Security）
+ALTER TABLE factories ENABLE ROW LEVEL SECURITY;
 
-UPDATE licenses
-SET status = CASE
-  WHEN type IN ('air', 'water') THEN 'pending'  -- 還在申請階段
-  ELSE 'valid'  -- 已取得
-END;
+-- 4. 建立 RLS 政策（允許所有人查詢）
+CREATE POLICY "Allow public select on factories" 
+ON factories 
+FOR SELECT 
+USING (true);
 
--- 4. 新增一些範例許可證（展示多許可證情況）
-INSERT INTO licenses (client_id, type, name, workflow_stage, status, next_action, expected_date)
+-- 5. 建立 RLS 政策（允許插入/更新，供 n8n 使用）
+CREATE POLICY "Allow insert for service role" 
+ON factories 
+FOR INSERT 
+WITH CHECK (true);
+
+CREATE POLICY "Allow update for service role" 
+ON factories 
+FOR UPDATE 
+USING (true);
+
+-- =====================================================
+-- 驗證與測試
+-- =====================================================
+
+-- 測試 1: 查看資料表結構
 SELECT 
-  id,
-  'waste',
-  '廢棄物清理計畫書',
-  '正常營運',
-  'valid',
-  '每季定期申報',
-  NULL
-FROM clients WHERE tax_id = '12345678';
+    column_name, 
+    data_type, 
+    is_nullable
+FROM information_schema.columns
+WHERE table_name = 'factories'
+ORDER BY ordinal_position;
 
--- 5. 查詢測試：確認資料正確
+-- 測試 2: 確認 RLS 已啟用
 SELECT 
-  c.name AS 客戶名稱,
-  l.type AS 許可證類型,
-  l.name AS 許可證名稱,
-  l.workflow_stage AS 流程階段,
-  l.status AS 證照狀態,
-  l.next_action AS 下一步動作,
-  l.expected_date AS 預計日期,
-  l.valid_until AS 有效期限
-FROM licenses l
-JOIN clients c ON l.client_id = c.id
-WHERE c.tax_id = '12345678'
-ORDER BY l.type;
+    tablename, 
+    rowsecurity 
+FROM pg_tables 
+WHERE schemaname = 'public' 
+AND tablename = 'factories';
 
--- 完成！現在資料庫結構更清晰了
+-- 測試 3: 查看所有政策
+SELECT 
+    schemaname,
+    tablename,
+    policyname,
+    permissive,
+    roles,
+    cmd
+FROM pg_policies
+WHERE tablename = 'factories'
+ORDER BY policyname;
+
+-- =====================================================
+-- 測試插入範例資料（可選）
+-- =====================================================
+
+-- 插入一筆測試資料
+INSERT INTO factories (
+  emsno, 
+  uniformno, 
+  facilityname, 
+  county, 
+  township,
+  facilityaddress,
+  industryname,
+  isair,
+  iswater,
+  iswaste,
+  consultant_company,
+  notes,
+  data_source
+) VALUES (
+  'TEST001',
+  '12345678',
+  '測試工廠',
+  '新北市',
+  '土城區',
+  '新北市土城區測試路123號',
+  '金屬表面處理業',
+  true,
+  true,
+  false,
+  '測試顧問公司',
+  '測試資料',
+  '新北市'
+);
+
+-- 查詢測試資料
+SELECT * FROM factories WHERE emsno = 'TEST001';
+
+-- 查詢特定統編的所有工廠
+SELECT * FROM factories WHERE uniformno = '12345678';
+
+-- 刪除測試資料（執行後請刪除）
+-- DELETE FROM factories WHERE emsno = 'TEST001';
+
+-- =====================================================
+-- 完成！
+-- =====================================================
+-- 資料表已建立完成，可以開始使用 n8n 同步資料了

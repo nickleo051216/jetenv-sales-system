@@ -86,18 +86,19 @@ const ClientView = () => {
   const [loading, setLoading] = useState(true);
 
   // Modal states
-  // Modal states
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [editingClient, setEditingClient] = useState(null); // 進度更新
   const [editInfoClient, setEditInfoClient] = useState(null); // 基本資料編輯
   const [moeaData, setMoeaData] = useState(null); // 經濟部資料
+  const [factoryData, setFactoryData] = useState(null); // 工廠資料（從 factories 表）
   const [newClientForm, setNewClientForm] = useState({
     name: '',
     taxId: '',
     status: '規劃階段',
     nextAction: '',
     deadline: '',
-    licenseTypes: [] // 空氣, 廢水, 廢棄物, 毒化, 土壤
+    licenseTypes: [], // 空氣, 廢水, 廢棄物, 毒化, 土壤
+    industry: '' // 行業別
   });
 
   // 從 Supabase 讀取客戶資料
@@ -143,7 +144,7 @@ const ClientView = () => {
     }
   };
 
-  // ⚡ Smart Add: 自動帶入經濟部資料
+  // ⚡ Smart Add: 自動帶入經濟部資料 + 工廠資料
   const handleAutoFill = async () => {
     if (!newClientForm.taxId || newClientForm.taxId.length !== 8) {
       alert('請先輸入正確的 8 碼統編');
@@ -151,23 +152,87 @@ const ClientView = () => {
     }
 
     try {
-      setLoading(true); // 借用 loading state 顯示讀取中
-      const res = await fetch(`/api/moea?taxId=${newClientForm.taxId}`);
-      const data = await res.json();
+      setLoading(true);
 
-      if (data.found && data.data) {
-        const company = data.data;
-        setNewClientForm(prev => ({
-          ...prev,
-          name: company.name
-        }));
-        setMoeaData(company); // 儲存完整資料
-        alert(`🎉 成功帶入資料！`);
-      } else {
+      // 同時查詢兩個 API：經濟部 + 工廠資料
+      const [moeaRes, factoryRes] = await Promise.all([
+        fetch(`/api/moea?taxId=${newClientForm.taxId}`),
+        fetch(`/api/factories?taxId=${newClientForm.taxId}`)
+      ]);
+
+      const moeaResult = await moeaRes.json();
+      const factoryResult = await factoryRes.json();
+
+      console.log('🔍 MOEA 結果:', moeaResult);
+      console.log('🏭 工廠結果:', factoryResult);
+
+      // 如果兩個都查不到資料
+      if (!moeaResult.found && !factoryResult.found) {
         alert('❌ 找不到此統編資料，請確認是否輸入正確。');
+        return;
       }
+
+      // 準備表單資料
+      let formData = { ...newClientForm };
+      let autoSelectedLicenses = [];
+
+      // 1. 處理工廠資料（優先使用）
+      if (factoryResult.found) {
+        const factory = factoryResult.data;
+
+        // 如果有多個工廠，使用第一個（之後可以讓用戶選擇）
+        const factoryInfo = Array.isArray(factory) ? factory[0] : factory;
+
+        formData.name = factoryInfo.facilityName || formData.name;
+        formData.industry = factoryInfo.industryName || '';
+
+        // 🎯 自動勾選委託項目（根據工廠資料的 licenses）
+        const licenses = factoryInfo.licenses || {};
+        if (licenses.air) autoSelectedLicenses.push('air');
+        if (licenses.water) autoSelectedLicenses.push('water');
+        if (licenses.waste) autoSelectedLicenses.push('waste');
+        if (licenses.toxic) autoSelectedLicenses.push('toxic');
+        if (licenses.soil) autoSelectedLicenses.push('soil');
+
+        formData.licenseTypes = autoSelectedLicenses;
+        setFactoryData(factoryResult); // 儲存完整工廠資料
+      }
+
+      // 2. 處理經濟部資料（補充資訊）
+      if (moeaResult.found) {
+        const company = moeaResult.data;
+        // 如果工廠資料沒有提供公司名稱，使用經濟部資料
+        if (!formData.name) {
+          formData.name = company.name;
+        }
+        setMoeaData(company); // 儲存完整經濟部資料
+      }
+
+      // 更新表單
+      setNewClientForm(formData);
+
+      // 成功提示
+      const sources = [];
+      if (moeaResult.found) sources.push('政府資料');
+      if (factoryResult.found) sources.push('工廠登記');
+
+      let message = `🎉 成功帶入${sources.join(' + ')}！`;
+      if (autoSelectedLicenses.length > 0) {
+        const licenseLabels = {
+          air: '空氣',
+          water: '廢水',
+          waste: '廢棄物',
+          toxic: '毒化',
+          soil: '土壤'
+        };
+        const selectedLabels = autoSelectedLicenses.map(l => licenseLabels[l]).join('、');
+        message += `\n已自動勾選委託項目：${selectedLabels}`;
+      }
+
+      alert(message);
+
     } catch (err) {
-      console.error(err);
+      console.error('自動帶入錯誤:', err);
       alert('自動帶入失敗，請稍後再試');
     } finally {
       setLoading(false);
@@ -221,9 +286,11 @@ const ClientView = () => {
         status: '規劃階段',
         nextAction: '',
         deadline: '',
-        licenseTypes: []
+        licenseTypes: [],
+        industry: ''
       });
       setMoeaData(null); // 清除暫存的經濟部資料
+      setFactoryData(null); // 清除暫存的工廠資料
       fetchClients(); // 重新載入
     } catch (error) {
       console.error('新增客戶失敗:', error);
@@ -548,6 +615,72 @@ const ClientView = () => {
                       🏭 查無營業項目資料
                     </div>
                   )}
+                </div>
+              )}
+
+              {/* 工廠資料卡片 */}
+              {factoryData && factoryData.found && (
+                <div className="bg-gradient-to-r from-green-50 to-teal-50 border border-green-100 rounded-lg p-3 space-y-2">
+                  <div className="flex items-center gap-2 text-sm font-bold text-green-800">
+                    <span>🏭 工廠登記資料</span>
+                    {factoryData.multiple && (
+                      <span className="px-2 py-0.5 rounded text-xs bg-orange-100 text-orange-700">
+                        共 {factoryData.count} 間工廠
+                      </span>
+                    )}
+                  </div>
+
+                  {(() => {
+                    const factory = Array.isArray(factoryData.data) ? factoryData.data[0] : factoryData.data;
+                    return (
+                      <>
+                        {factory.industryName && (
+                          <div className="text-xs font-medium text-green-700 bg-green-50 px-2 py-1 rounded">
+                            🏢 {factory.industryName}
+                          </div>
+                        )}
+                        {factory.address && (
+                          <div className="text-xs text-gray-600 truncate" title={factory.address}>
+                            📍 {factory.county}{factory.township} {factory.address}
+                          </div>
+                        )}
+                        <div className="grid grid-cols-2 gap-2 text-xs text-gray-600">
+                          {factory.consultantCompany && (
+                            <div className="col-span-2">
+                              <span className="font-medium">現有顧問:</span> {factory.consultantCompany}
+                            </div>
+                          )}
+                          {factory.renewalYear && (
+                            <div className="col-span-2">
+                              <span className="font-medium">換證年:</span> {factory.renewalYear}
+                            </div>
+                          )}
+                        </div>
+                        {/* 顯示已自動勾選的委託項目 */}
+                        {newClientForm.licenseTypes && newClientForm.licenseTypes.length > 0 && (
+                          <div className="text-xs pt-2 border-t border-green-100">
+                            <div className="font-medium text-green-700 mb-1">✅ 已自動勾選委託項目：</div>
+                            <div className="flex flex-wrap gap-1">
+                              {newClientForm.licenseTypes.map(type => {
+                                const labels = {
+                                  air: '💨 空氣',
+                                  water: '💧 廢水',
+                                  waste: '🗑️ 廢棄物',
+                                  toxic: '☢️ 毒化',
+                                  soil: '🌍 土壤'
+                                };
+                                return (
+                                  <span key={type} className="px-2 py-0.5 bg-white rounded border border-green-200 text-green-700">
+                                    {labels[type]}
+                                  </span>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        )}
+                      </>
+                    );
+                  })()}
                 </div>
               )}
               <div>
