@@ -29,7 +29,8 @@ import {
   Edit3,
   Plus,
   Zap,
-  Trash2
+  Trash2,
+  Edit2
 } from 'lucide-react';
 
 // --- Client List Data ---
@@ -85,8 +86,10 @@ const ClientView = () => {
   const [loading, setLoading] = useState(true);
 
   // Modal states
+  // Modal states
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
-  const [editingClient, setEditingClient] = useState(null);
+  const [editingClient, setEditingClient] = useState(null); // 進度更新
+  const [editInfoClient, setEditInfoClient] = useState(null); // 基本資料編輯
   const [moeaData, setMoeaData] = useState(null); // 經濟部資料
   const [newClientForm, setNewClientForm] = useState({
     name: '',
@@ -198,9 +201,9 @@ const ClientView = () => {
         const licensesToInsert = newClientForm.licenseTypes.map(type => ({
           client_id: clientData.id,
           type: type, // 'air', 'water', etc.
-          status: '規劃中', // 預設狀態
-          authority: '環保局',
-          identifier: `${type.toUpperCase()}-${newClientForm.taxId.slice(-4)}` // 暫時產生一個假證號
+          status: 'pending', // 預設狀態 (改為 pending 符合 schema)
+          name: `${type.toUpperCase()} 許可證`, // 給一個預設名稱
+          workflow_stage: '規劃階段'
         }));
 
         const { error: licenseError } = await supabase
@@ -273,6 +276,34 @@ const ClientView = () => {
     } catch (error) {
       console.error('刪除失敗:', error);
       alert(`❌ 刪除失敗：${error.message}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // 更新客戶基本資料 (名稱、統編)
+  const handleUpdateClientInfo = async (e) => {
+    e.preventDefault();
+    if (!editInfoClient) return;
+
+    try {
+      setLoading(true);
+      const { error } = await supabase
+        .from('clients')
+        .update({
+          name: editInfoClient.name,
+          tax_id: editInfoClient.taxId
+        })
+        .eq('id', editInfoClient.id);
+
+      if (error) throw error;
+
+      alert('✅ 基本資料更新成功！');
+      setEditInfoClient(null);
+      fetchClients();
+    } catch (error) {
+      console.error('更新失敗:', error);
+      alert(`❌ 更新失敗：${error.message}`);
     } finally {
       setLoading(false);
     }
@@ -497,10 +528,21 @@ const ClientView = () => {
       {editingClient && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4" onClick={() => setEditingClient(null)}>
           <div className="bg-white rounded-2xl p-6 max-w-md w-full shadow-2xl" onClick={e => e.stopPropagation()}>
-            <div className="flex justify-between items-center mb-6">
+            <div className="flex justify-between items-start mb-4">
               <div>
-                <h3 className="text-xl font-bold text-gray-800">✏️ 更新進度</h3>
-                <p className="text-sm text-gray-500">{editingClient.name}</p>
+                <div className="flex items-center gap-2">
+                  <h3 className="font-bold text-lg text-gray-800">{editingClient.name}</h3>
+                  <button
+                    onClick={() => setEditInfoClient(editingClient)}
+                    className="text-gray-400 hover:text-blue-500 transition-colors p-1"
+                    title="編輯基本資料"
+                  >
+                    <Edit2 className="w-4 h-4" />
+                  </button>
+                </div>
+                <div className="flex items-center text-sm text-gray-500 mt-1">
+                  <span className="font-mono bg-gray-100 px-2 py-0.5 rounded text-xs mr-2">{editingClient.taxId}</span>
+                </div>
               </div>
               <button onClick={() => setEditingClient(null)} className="text-gray-400 hover:text-gray-600">
                 <X className="w-5 h-5" />
@@ -528,6 +570,37 @@ const ClientView = () => {
                   取消
                 </button>
                 <button type="submit" className="flex-1 bg-blue-600 text-white py-3 rounded-lg font-bold hover:bg-blue-700 transition flex items-center justify-center gap-2">
+                  <Save className="w-4 h-4" /> 儲存變更
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+      {/* 編輯客戶基本資料 Modal */}
+      {editInfoClient && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4" onClick={() => setEditInfoClient(null)}>
+          <div className="bg-white rounded-2xl p-6 max-w-md w-full shadow-2xl" onClick={e => e.stopPropagation()}>
+            <div className="flex justify-between items-center mb-6">
+              <h3 className="text-xl font-bold text-gray-800">✏️ 編輯基本資料</h3>
+              <button onClick={() => setEditInfoClient(null)} className="text-gray-400 hover:text-gray-600">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <form onSubmit={handleUpdateClientInfo} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">公司名稱</label>
+                <input required type="text" className="w-full border rounded-lg p-2" value={editInfoClient.name} onChange={e => setEditInfoClient({ ...editInfoClient, name: e.target.value })} />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">統一編號</label>
+                <input required type="text" className="w-full border rounded-lg p-2 font-mono" value={editInfoClient.taxId} onChange={e => setEditInfoClient({ ...editInfoClient, taxId: e.target.value })} maxLength={8} />
+              </div>
+              <div className="pt-4 border-t border-gray-100 flex gap-2">
+                <button type="button" onClick={() => setEditInfoClient(null)} className="flex-1 bg-gray-100 text-gray-600 py-3 rounded-lg font-bold hover:bg-gray-200 transition">
+                  取消
+                </button>
+                <button type="submit" className="flex-1 bg-teal-600 text-white py-3 rounded-lg font-bold hover:bg-teal-700 transition flex items-center justify-center gap-2">
                   <Save className="w-4 h-4" /> 儲存變更
                 </button>
               </div>
