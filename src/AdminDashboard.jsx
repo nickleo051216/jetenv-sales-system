@@ -398,15 +398,21 @@ const ClientView = () => {
             </div>
 
             <div className="flex flex-wrap gap-1 mb-4">
-              {client.type.map(t => (
-                <span key={t} className={`text-xs px-2 py-0.5 rounded border 
-                    ${t === 'Air' ? 'bg-purple-50 text-purple-700 border-purple-100' :
-                    t === 'Water' ? 'bg-blue-50 text-blue-700 border-blue-100' :
-                      t === 'Soil' ? 'bg-amber-50 text-amber-700 border-amber-100' :
-                        'bg-red-50 text-red-700 border-red-100'}`}>
-                  {t === 'Air' ? '💨 空氣' : t === 'Water' ? '💧 廢水' : t === 'Soil' ? '🌍 土壤' : '☢️ 毒化'}
-                </span>
-              ))}
+              {client.type.map(t => {
+                const typeInfo = {
+                  'Air': { label: '💨 空氣', color: 'purple', bg: 'bg-purple-50', text: 'text-purple-700', border: 'border-purple-100' },
+                  'Water': { label: '💧 廢水', color: 'blue', bg: 'bg-blue-50', text: 'text-blue-700', border: 'border-blue-100' },
+                  'Waste': { label: '🗑️ 廢棄物', color: 'amber', bg: 'bg-amber-50', text: 'text-amber-700', border: 'border-amber-100' },
+                  'Toxic': { label: '☢️ 毒化', color: 'red', bg: 'bg-red-50', text: 'text-red-700', border: 'border-red-100' },
+                  'Soil': { label: '🌍 土壤', color: 'green', bg: 'bg-green-50', text: 'text-green-700', border: 'border-green-100' }
+                }[t] || { label: t, color: 'gray', bg: 'bg-gray-50', text: 'text-gray-700', border: 'border-gray-100' };
+
+                return (
+                  <span key={t} className={`text-xs px-2 py-0.5 rounded border ${typeInfo.bg} ${typeInfo.text} ${typeInfo.border}`}>
+                    {typeInfo.label}
+                  </span>
+                );
+              })}
             </div>
 
             <div className="space-y-2 text-sm bg-gray-50 p-3 rounded-lg">
