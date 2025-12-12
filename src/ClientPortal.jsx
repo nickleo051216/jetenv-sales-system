@@ -342,7 +342,7 @@ const ClientPortal = () => {
                             onKeyPress={(e) => e.key === 'Enter' && handleSearch()}
                         />
                         <button
-                            onClick={handleSearch}
+                            onClick={() => handleSearch()}
                             className="w-full bg-blue-600 text-white text-xl font-bold py-4 rounded-xl hover:bg-blue-700 active:scale-95 transition shadow-lg flex justify-center items-center gap-2"
                         >
                             <Search size={24} />
