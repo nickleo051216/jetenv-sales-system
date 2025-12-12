@@ -697,6 +697,55 @@ const ClientPortal = () => {
 
                 {activeTab === 'compliance' && <ComplianceView />}
                 {activeTab === 'library' && <RegulationLibraryView />}
+
+                {/* Footer */}
+                <footer className="mt-12 bg-white border-t border-gray-200 py-12 px-4">
+                    <div className="max-w-4xl mx-auto grid md:grid-cols-2 gap-8">
+                        {/* Contact Info */}
+                        <div className="space-y-4">
+                            <div>
+                                <h3 className="text-xl font-bold text-gray-800">傑太環境工程顧問有限公司</h3>
+                                <p className="text-sm text-gray-500 font-medium">JET Environmental Engineering Ltd</p>
+                            </div>
+                            <div className="space-y-2 text-gray-600">
+                                <p className="flex items-center gap-2">
+                                    <span className="font-bold">業務副理</span> 張惟荏
+                                </p>
+                                <p className="flex items-center gap-2">
+                                    <Phone size={16} /> (02)6609-5888 #103
+                                </p>
+                                <p className="flex items-center gap-2">
+                                    <FileText size={16} /> 統編: 60779653
+                                </p>
+                            </div>
+                        </div>
+
+                        {/* Links */}
+                        <div className="space-y-4">
+                            <h4 className="font-bold text-gray-800 border-b pb-2 mb-4">相關連結</h4>
+                            <div className="grid grid-cols-1 gap-3">
+                                <a href="#" className="flex items-center gap-2 text-blue-600 hover:text-blue-800 transition">
+                                    <Globe size={16} /> 官方網站
+                                </a>
+                                <a href="#" className="flex items-center gap-2 text-green-600 hover:text-green-800 transition">
+                                    <MessageCircle size={16} /> 官方 Line 帳號
+                                </a>
+                                <div className="pt-4">
+                                    <h5 className="font-bold text-gray-700 mb-2 text-sm">官方法規資源</h5>
+                                    <div className="space-y-2 text-sm text-gray-600">
+                                        <a href="https://law.moj.gov.tw/" target="_blank" rel="noreferrer" className="block hover:text-blue-600 transition">全國法規資料庫</a>
+                                        <a href="https://oaout.moenv.gov.tw/law/" target="_blank" rel="noreferrer" className="block hover:text-blue-600 transition">環境部法規查詢</a>
+                                        <a href="https://law.moea.gov.tw/" target="_blank" rel="noreferrer" className="block hover:text-blue-600 transition">經濟部法規查詢</a>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="max-w-4xl mx-auto mt-12 pt-8 border-t border-gray-100 text-center text-gray-400 text-sm">
+                        <p>Designed by Nick Chang (ZN Studio) | 法規資料已查證更新至 2024年12月</p>
+                    </div>
+                </footer>
             </main>
 
             <button
