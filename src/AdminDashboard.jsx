@@ -305,10 +305,16 @@ const ClientView = () => {
       const originalTypes = editInfoClient.licenses.map(l => l.type.toLowerCase());
       const newTypes = (editInfoClient.licenseTypes || []).map(t => t.toLowerCase());
 
+      console.log('🔍 Debug - 原始項目:', originalTypes);
+      console.log('🔍 Debug - 新項目:', newTypes);
+
       // 找出要新增的
       const toAdd = newTypes.filter(t => !originalTypes.includes(t));
       // 找出要刪除的
       const toRemove = originalTypes.filter(t => !newTypes.includes(t));
+
+      console.log('➕ Debug - 要新增:', toAdd);
+      console.log('➖ Debug - 要刪除:', toRemove);
 
       // 執行新增
       if (toAdd.length > 0) {
@@ -319,23 +325,40 @@ const ClientView = () => {
           name: `${type.toUpperCase()} 許可證`,
           workflow_stage: '規劃階段'
         }));
+        console.log('➕ 執行新增:', licensesToInsert);
         const { error: addError } = await supabase.from('licenses').insert(licensesToInsert);
-        if (addError) throw addError;
+        if (addError) {
+          console.error('❌ 新增失敗:', addError);
+          throw addError;
+        }
       }
 
       // 執行刪除
       if (toRemove.length > 0) {
-        const { error: removeError } = await supabase
+        console.log('➖ 準備刪除 - Client ID:', editInfoClient.id, 'Types:', toRemove);
+
+        const { data: deletedData, error: removeError } = await supabase
           .from('licenses')
           .delete()
           .eq('client_id', editInfoClient.id)
-          .in('type', toRemove);
-        if (removeError) throw removeError;
+          .in('type', toRemove)
+          .select();
+
+        console.log('➖ 刪除結果:', deletedData);
+
+        if (removeError) {
+          console.error('❌ 刪除失敗:', removeError);
+          throw removeError;
+        }
+
+        if (!deletedData || deletedData.length === 0) {
+          console.warn('⚠️ 警告：沒有刪除任何記錄，可能是因為找不到匹配的項目');
+        }
       }
 
       alert('✅ 客戶資料與委託項目更新成功！');
       setEditInfoClient(null);
-      fetchClients();
+      await fetchClients(); // 改為 await 確保重新載入完成
     } catch (error) {
       console.error('更新失敗:', error);
       alert(`❌ 更新失敗：${error.message}`);
