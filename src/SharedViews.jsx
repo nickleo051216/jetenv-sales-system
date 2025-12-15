@@ -401,9 +401,10 @@ export const RegulationLibraryView = () => {
         { id: 'all', label: '📚 全部', class: 'bg-slate-800 text-white' },
         { id: 'air', label: '💨 空氣', class: 'bg-purple-100 text-purple-700 hover:bg-purple-200' },
         { id: 'water', label: '💧 水污', class: 'bg-blue-100 text-blue-700 hover:bg-blue-200' },
+        { id: 'waste', label: '🗑️ 廢棄物', class: 'bg-orange-100 text-orange-700 hover:bg-orange-200' },
         { id: 'toxic', label: '☢️ 毒化物', class: 'bg-red-100 text-red-700 hover:bg-red-200' },
         { id: 'soil', label: '🌍 土壤', class: 'bg-amber-100 text-amber-700 hover:bg-amber-200' },
-        { id: 'factory', label: '🏭 工廠', class: 'bg-orange-100 text-orange-700 hover:bg-orange-200' },
+        { id: 'factory', label: '🏭 工廠', class: 'bg-gray-100 text-gray-700 hover:bg-gray-200' },
     ];
 
     return (
