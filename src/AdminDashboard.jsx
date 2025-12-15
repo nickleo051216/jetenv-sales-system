@@ -91,6 +91,7 @@ const ClientView = () => {
   const [editInfoClient, setEditInfoClient] = useState(null); // 基本資料編輯
   const [moeaData, setMoeaData] = useState(null); // 經濟部資料
   const [factoryData, setFactoryData] = useState(null); // 工廠資料（從 factories 表）
+  const [permitsData, setPermitsData] = useState(null); // 許可證資料（從環境部 API）
   const [newClientForm, setNewClientForm] = useState({
     name: '',
     taxId: '',
@@ -127,7 +128,9 @@ const ClientView = () => {
         taxId: client.tax_id,
         status: client.status,
         phase: client.phase,
+        currentProgress: client.current_progress || '待確認',  // 新增：目前進度
         nextAction: client.next_action || '待確認',
+        remarks: client.remarks || '',                         // 新增：備註
         deadline: client.deadline || '未設定',
         type: client.licenses?.map(l => l.type.charAt(0).toUpperCase() + l.type.slice(1)) || ['Air'],
         licenses: client.licenses || [],
@@ -154,17 +157,20 @@ const ClientView = () => {
     try {
       setLoading(true);
 
-      // 同時查詢兩個 API：經濟部 + 工廠資料
-      const [moeaRes, factoryRes] = await Promise.all([
+      // 同時查詢三個 API：經濟部 + 工廠資料 + 許可證到期日
+      const [moeaRes, factoryRes, permitsRes] = await Promise.all([
         fetch(`/api/moea?taxId=${newClientForm.taxId}`),
-        fetch(`/api/factories?taxId=${newClientForm.taxId}`)
+        fetch(`/api/factories?taxId=${newClientForm.taxId}`),
+        fetch(`/api/permits?taxId=${newClientForm.taxId}`)  // 新增：許可證查詢
       ]);
 
       const moeaResult = await moeaRes.json();
       const factoryResult = await factoryRes.json();
+      const permitsResult = await permitsRes.json();
 
       console.log('🔍 MOEA 結果:', moeaResult);
       console.log('🏭 工廠結果:', factoryResult);
+      console.log('📄 許可證結果:', permitsResult);
 
       // 如果兩個都查不到資料
       if (!moeaResult.found && !factoryResult.found) {
@@ -251,6 +257,43 @@ const ClientView = () => {
         setMoeaData(company); // 儲存完整經濟部資料
       }
 
+      // 3. 處理許可證資料（環境部 API）
+      if (permitsResult.found) {
+        setPermitsData(permitsResult);
+
+        // 🔥 如果查到水污許可,自動勾選「廢水」委託項目
+        if (permitsResult.water?.found && permitsResult.water.count > 0) {
+          if (!autoSelectedLicenses.includes('water')) {
+            autoSelectedLicenses.push('water');
+            console.log('💧 環境部 API 查到水污許可,自動勾選廢水');
+          }
+        }
+
+        // 🔥 如果有列管狀態,也自動勾選對應項目
+        if (permitsResult.summary) {
+          const s = permitsResult.summary;
+          if (s.isAirControlled && !autoSelectedLicenses.includes('air')) {
+            autoSelectedLicenses.push('air');
+            console.log('💨 列管狀態:空污列管,自動勾選空氣');
+          }
+          if (s.isWaterControlled && !autoSelectedLicenses.includes('water')) {
+            autoSelectedLicenses.push('water');
+            console.log('💧 列管狀態:水污列管,自動勾選廢水');
+          }
+          if (s.isWasteControlled && !autoSelectedLicenses.includes('waste')) {
+            autoSelectedLicenses.push('waste');
+            console.log('🗑️ 列管狀態:廢棄物列管,自動勾選廢棄物');
+          }
+          if (s.isToxicControlled && !autoSelectedLicenses.includes('toxic')) {
+            autoSelectedLicenses.push('toxic');
+            console.log('☢️ 列管狀態:毒化物列管,自動勾選毒化');
+          }
+        }
+
+        // 更新表單的委託項目
+        formData.licenseTypes = autoSelectedLicenses;
+      }
+
       // 更新表單
       setNewClientForm(formData);
 
@@ -258,6 +301,7 @@ const ClientView = () => {
       const sources = [];
       if (moeaResult.found) sources.push('政府資料');
       if (factoryResult.found) sources.push('工廠登記');
+      if (permitsResult.found) sources.push('許可證資料');
 
       let message = `🎉 成功帶入${sources.join(' + ')}！`;
       if (autoSelectedLicenses.length > 0) {
@@ -273,6 +317,24 @@ const ClientView = () => {
       }
       if (formData.deadline) {
         message += `\n📅 已自動設定期限：${formData.deadline}`;
+      }
+
+      // 顯示水污許可到期日
+      if (permitsResult.found && permitsResult.summary?.waterPermitEndDate) {
+        message += `\n💧 水污許可到期日：${permitsResult.summary.waterPermitEndDate}`;
+      }
+
+      // 顯示列管狀態
+      if (permitsResult.found && permitsResult.summary?.controlNo) {
+        const s = permitsResult.summary;
+        const controlStatus = [];
+        if (s.isAirControlled) controlStatus.push('空');
+        if (s.isWaterControlled) controlStatus.push('水');
+        if (s.isWasteControlled) controlStatus.push('廢');
+        if (s.isToxicControlled) controlStatus.push('毒');
+        if (controlStatus.length > 0) {
+          message += `\n🏭 列管狀態：${controlStatus.join('/')}列管 (${s.controlNo})`;
+        }
       }
 
       alert(message);
@@ -309,13 +371,24 @@ const ClientView = () => {
 
       // 2. 如果有選取委託項目，新增到 licenses 表
       if (newClientForm.licenseTypes && newClientForm.licenseTypes.length > 0) {
-        const licensesToInsert = newClientForm.licenseTypes.map(type => ({
-          client_id: clientData.id,
-          type: type, // 'air', 'water', etc.
-          status: 'pending', // 預設狀態 (改為 pending 符合 schema)
-          name: `${type.toUpperCase()} 許可證`, // 給一個預設名稱
-          workflow_stage: '規劃階段'
-        }));
+        const licensesToInsert = newClientForm.licenseTypes.map(type => {
+          const license = {
+            client_id: clientData.id,
+            type: type, // 'air', 'water', etc.
+            status: 'pending', // 預設狀態
+            name: `${type.toUpperCase()} 許可證`,
+            workflow_stage: '規劃階段'
+          };
+
+          // 🔥 如果是水污許可且有查到到期日,存入 expiration_date
+          if (type === 'water' && permitsData?.summary?.waterPermitEndDate) {
+            license.expiration_date = permitsData.summary.waterPermitEndDate;
+            license.status = 'normal';  // 從 API 取得的,設為正常
+            console.log('💧 水污許可到期日已存入:', permitsData.summary.waterPermitEndDate);
+          }
+
+          return license;
+        });
 
         const { error: licenseError } = await supabase
           .from('licenses')
@@ -337,6 +410,7 @@ const ClientView = () => {
       });
       setMoeaData(null); // 清除暫存的經濟部資料
       setFactoryData(null); // 清除暫存的工廠資料
+      setPermitsData(null); // 清除暫存的許可證資料
       fetchClients(); // 重新載入
     } catch (error) {
       console.error('新增客戶失敗:', error);
@@ -355,7 +429,9 @@ const ClientView = () => {
         .update({
           status: editingClient.status,
           phase: phaseMap[editingClient.status] || editingClient.phase,
+          current_progress: editingClient.currentProgress,  // 新增：目前進度
           next_action: editingClient.nextAction,
+          remarks: editingClient.remarks,                   // 新增：備註
           deadline: editingClient.deadline || null
         })
         .eq('id', editingClient.id);
@@ -571,12 +647,43 @@ const ClientView = () => {
             </div>
 
             <div className="space-y-2 text-sm bg-gray-50 p-3 rounded-lg">
+              {/* 目前進度 */}
               <div className="flex justify-between text-gray-600">
-                <span>下一步:</span>
-                <span className="font-medium text-gray-900">{client.nextAction}</span>
+                <span className="flex items-center gap-1">
+                  <Activity className="w-3 h-3" />
+                  目前進度:
+                </span>
+                <span className="font-medium text-gray-900">{client.currentProgress}</span>
               </div>
+
+              {/* 下一步動作 */}
               <div className="flex justify-between text-gray-600">
-                <span>期限:</span>
+                <span className="flex items-center gap-1">
+                  <ChevronRight className="w-3 h-3" />
+                  下一步:
+                </span>
+                <span className="font-medium text-teal-700">{client.nextAction}</span>
+              </div>
+
+              {/* 備註 */}
+              {client.remarks && (
+                <div className="flex justify-between text-gray-600">
+                  <span className="flex items-center gap-1">
+                    <FileText className="w-3 h-3" />
+                    備註:
+                  </span>
+                  <span className="px-2 py-0.5 bg-amber-50 text-amber-700 rounded text-xs font-medium">
+                    {client.remarks}
+                  </span>
+                </div>
+              )}
+
+              {/* 期限 */}
+              <div className="flex justify-between text-gray-600 pt-2 border-t border-gray-200">
+                <span className="flex items-center gap-1">
+                  <Clock className="w-3 h-3" />
+                  期限:
+                </span>
                 <span className="font-bold text-red-600">{client.deadline}</span>
               </div>
             </div>
@@ -827,12 +934,64 @@ const ClientView = () => {
                   <option value="營運中">營運中</option>
                 </select>
               </div>
+
+              {/* 目前進度 */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">下一步動作</label>
-                <input type="text" className="w-full border rounded-lg p-2" value={editingClient.nextAction} onChange={e => setEditingClient({ ...editingClient, nextAction: e.target.value })} />
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <Activity className="w-3 h-3 inline mr-1" />
+                  目前進度
+                </label>
+                <input
+                  type="text"
+                  className="w-full border rounded-lg p-2"
+                  value={editingClient.currentProgress || ''}
+                  onChange={e => setEditingClient({ ...editingClient, currentProgress: e.target.value })}
+                  placeholder="例如：mail出去了、已有業務行動"
+                />
               </div>
+
+              {/* 下一步動作 */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">截止期限</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <ChevronRight className="w-3 h-3 inline mr-1" />
+                  下一步動作
+                </label>
+                <input
+                  type="text"
+                  className="w-full border rounded-lg p-2"
+                  value={editingClient.nextAction || ''}
+                  onChange={e => setEditingClient({ ...editingClient, nextAction: e.target.value })}
+                  placeholder="例如：待回覆、上白"
+                />
+              </div>
+
+              {/* 備註 */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <FileText className="w-3 h-3 inline mr-1" />
+                  備註
+                </label>
+                <select
+                  className="w-full border rounded-lg p-2"
+                  value={editingClient.remarks || ''}
+                  onChange={e => setEditingClient({ ...editingClient, remarks: e.target.value })}
+                >
+                  <option value="">無</option>
+                  <option value="可拜訪">可拜訪</option>
+                  <option value="查無資料">查無資料</option>
+                  <option value="剛換發">剛換發</option>
+                  <option value="自行申報">自行申報</option>
+                  <option value="待觀察">待觀察</option>
+                  <option value="自己人">自己人</option>
+                </select>
+              </div>
+
+              {/* 期限 */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <Clock className="w-3 h-3 inline mr-1" />
+                  截止期限
+                </label>
                 <input type="date" className="w-full border rounded-lg p-2" value={editingClient.deadline} onChange={e => setEditingClient({ ...editingClient, deadline: e.target.value })} />
               </div>
               <div className="pt-4 border-t border-gray-100 flex gap-2">

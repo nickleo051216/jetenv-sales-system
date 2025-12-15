@@ -8,9 +8,11 @@ CREATE TABLE factories (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   
   -- 基本識別資訊
-  emsno TEXT UNIQUE NOT NULL,           -- 工廠登記編號（主鍵）
-  uniformno TEXT,                        -- 統一編號（查詢用）
+  emsno TEXT UNIQUE NOT NULL,           -- 工廠登記編號(主鍵)
+  uniformno TEXT,                        -- 統一編號(查詢用)
   facilityname TEXT,                     -- 工廠名稱
+  admino TEXT,                           -- 管理編號
+  facno TEXT,                            -- 工廠編號
   
   -- 地理資訊
   county TEXT,                           -- 縣市
@@ -18,35 +20,68 @@ CREATE TABLE factories (
   facilityaddress TEXT,                  -- 工廠地址
   industryareaname TEXT,                 -- 工業區名稱
   
+  -- 地理座標(用於地圖顯示)
+  twd97tm2x NUMERIC,                     -- TWD97 二度分帶 X 座標
+  twd97tm2y NUMERIC,                     -- TWD97 二度分帶 Y 座標
+  wgs84lon NUMERIC,                      -- WGS84 經度
+  wgs84lat NUMERIC,                      -- WGS84 緯度
+  
   -- 產業資訊
   industryid TEXT,                       -- 產業代號
-  industryname TEXT,                     -- 產業名稱（行業別）
+  industryname TEXT,                     -- 產業名稱(行業別)
+  industrygroup TEXT,                    -- 產業群組
   
-  -- 委託項目標記（來自 Google Sheets）
+  -- 委託項目標記(來自 Google Sheets)
   isair BOOLEAN DEFAULT FALSE,           -- 空氣污染防制
   iswater BOOLEAN DEFAULT FALSE,         -- 廢水處理
   iswaste BOOLEAN DEFAULT FALSE,         -- 廢棄物清理
   istoxic BOOLEAN DEFAULT FALSE,         -- 毒化物管理
   issoil BOOLEAN DEFAULT FALSE,          -- 土壤污染
   
+  -- 許可證到期日(重要商機資訊!)
+  airreleasedate DATE,                   -- 空污許可到期日
+  waterreleasedate DATE,                 -- 廢水許可到期日
+  wastereleasedate DATE,                 -- 廢棄物許可到期日
+  toxicreleasedate DATE,                 -- 毒化物許可到期日
+  soilreleasedate DATE,                  -- 土壤許可到期日
+  
   -- 業務資訊
   consultant_company TEXT,               -- 顧問公司
   phone TEXT,                            -- 電話
   renewal_year TEXT,                     -- 換證年
-  notes TEXT,                            -- 備註（可拜訪等）
+  notes TEXT,                            -- 備註(可拜訪等)
+  
+  -- 業務追蹤
+  scheduled_date DATE,                   -- 預計排程(拜訪日期)
+  result TEXT,                           -- 結果(拜訪結果、處理狀態等)
   
   -- 資料來源與時間戳
-  data_source TEXT,                      -- 資料來源（新北市、台北市等）
+  data_source TEXT,                      -- 資料來源(新北市、台北市等)
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- 2. 建立索引（加快查詢速度）
+-- 2. 建立索引(加快查詢速度)
+-- 基本查詢索引
 CREATE INDEX idx_factories_uniformno ON factories(uniformno);
 CREATE INDEX idx_factories_county ON factories(county);
 CREATE INDEX idx_factories_industryname ON factories(industryname);
 CREATE INDEX idx_factories_consultant ON factories(consultant_company);
 CREATE INDEX idx_factories_renewal ON factories(renewal_year);
+
+-- 新增：許可證到期日索引(用於商機開發)
+CREATE INDEX idx_factories_airreleasedate ON factories(airreleasedate);
+CREATE INDEX idx_factories_waterreleasedate ON factories(waterreleasedate);
+CREATE INDEX idx_factories_wastereleasedate ON factories(wastereleasedate);
+CREATE INDEX idx_factories_toxicreleasedate ON factories(toxicreleasedate);
+CREATE INDEX idx_factories_soilreleasedate ON factories(soilreleasedate);
+
+-- 新增：業務追蹤索引
+CREATE INDEX idx_factories_scheduled_date ON factories(scheduled_date);
+CREATE INDEX idx_factories_result ON factories(result);
+
+-- 新增：地理座標索引(用於地圖查詢)
+CREATE INDEX idx_factories_wgs84 ON factories(wgs84lon, wgs84lat);
 
 -- 3. 啟用 RLS（Row Level Security）
 ALTER TABLE factories ENABLE ROW LEVEL SECURITY;
