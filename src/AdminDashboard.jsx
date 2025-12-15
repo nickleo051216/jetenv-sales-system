@@ -95,11 +95,16 @@ const ClientView = () => {
   const [newClientForm, setNewClientForm] = useState({
     name: '',
     taxId: '',
-    status: '規劃階段',
+    status: '設置階段',
     nextAction: '',
     deadline: '',
     licenseTypes: [], // 空氣, 廢水, 廢棄物, 毒化, 土壤
-    industry: '' // 行業別
+    industry: '', // 行業別
+    // 許可證到期日
+    airExpiry: '',
+    waterExpiry: '',
+    toxicExpiry: '',
+    wasteExpiry: ''
   });
 
   // 從 Supabase 讀取客戶資料
@@ -371,20 +376,28 @@ const ClientView = () => {
 
       // 2. 如果有選取委託項目，新增到 licenses 表
       if (newClientForm.licenseTypes && newClientForm.licenseTypes.length > 0) {
+        // 許可證到期日映射
+        const expiryMap = {
+          air: newClientForm.airExpiry,
+          water: newClientForm.waterExpiry || permitsData?.summary?.waterPermitEndDate,
+          toxic: newClientForm.toxicExpiry || permitsData?.summary?.toxicPermitEndDate,
+          waste: newClientForm.wasteExpiry
+        };
+
         const licensesToInsert = newClientForm.licenseTypes.map(type => {
           const license = {
             client_id: clientData.id,
             type: type, // 'air', 'water', etc.
             status: 'pending', // 預設狀態
             name: `${type.toUpperCase()} 許可證`,
-            workflow_stage: '規劃階段'
+            workflow_stage: newClientForm.status
           };
 
-          // 🔥 如果是水污許可且有查到到期日,存入 expiration_date
-          if (type === 'water' && permitsData?.summary?.waterPermitEndDate) {
-            license.expiration_date = permitsData.summary.waterPermitEndDate;
-            license.status = 'normal';  // 從 API 取得的,設為正常
-            console.log('💧 水污許可到期日已存入:', permitsData.summary.waterPermitEndDate);
+          // 🔥 如果有到期日,存入 expiration_date
+          if (expiryMap[type]) {
+            license.expiration_date = expiryMap[type];
+            license.status = 'valid';  // 有到期日的設為有效
+            console.log(`📅 ${type} 許可到期日已存入:`, expiryMap[type]);
           }
 
           return license;
@@ -402,11 +415,15 @@ const ClientView = () => {
       setNewClientForm({
         name: '',
         taxId: '',
-        status: '規劃階段',
+        status: '設置階段',
         nextAction: '',
         deadline: '',
         licenseTypes: [],
-        industry: ''
+        industry: '',
+        airExpiry: '',
+        waterExpiry: '',
+        toxicExpiry: '',
+        wasteExpiry: ''
       });
       setMoeaData(null); // 清除暫存的經濟部資料
       setFactoryData(null); // 清除暫存的工廠資料
@@ -848,9 +865,13 @@ const ClientView = () => {
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">目前階段</label>
                 <select className="w-full border rounded-lg p-2" value={newClientForm.status} onChange={e => setNewClientForm({ ...newClientForm, status: e.target.value })}>
-                  <option value="規劃階段">規劃階段</option>
-                  <option value="試車階段">試車階段</option>
-                  <option value="營運中">營運中</option>
+                  <option value="設置階段">1️⃣ 設置階段</option>
+                  <option value="規劃階段">2️⃣ 規劃階段</option>
+                  <option value="設置許可申請中">3️⃣ 設置許可/水措申請中</option>
+                  <option value="試車階段">4️⃣ 試車階段</option>
+                  <option value="操作許可申請中">5️⃣ 操作許可申請中</option>
+                  <option value="營運中">6️⃣ 營運中</option>
+                  <option value="申請展延中">7️⃣ 申請展延中</option>
                 </select>
               </div>
               <div>
@@ -892,6 +913,50 @@ const ClientView = () => {
                 <label className="block text-sm font-medium text-gray-700 mb-1">期限</label>
                 <input type="date" className="w-full border rounded-lg p-2" value={newClientForm.deadline} onChange={e => setNewClientForm({ ...newClientForm, deadline: e.target.value })} />
               </div>
+
+              {/* 許可證到期日輸入區塊 */}
+              {newClientForm.licenseTypes?.length > 0 && (
+                <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 space-y-3">
+                  <label className="block text-sm font-bold text-amber-800">
+                    📅 許可證到期日（選填，營運中/展延案件請填寫）
+                  </label>
+                  <div className="grid grid-cols-2 gap-3">
+                    {newClientForm.licenseTypes.includes('air') && (
+                      <div>
+                        <label className="text-xs text-gray-600 font-medium">💨 空污許可</label>
+                        <input type="date" className="w-full border rounded p-2 text-sm"
+                          value={newClientForm.airExpiry || ''}
+                          onChange={e => setNewClientForm({ ...newClientForm, airExpiry: e.target.value })} />
+                      </div>
+                    )}
+                    {newClientForm.licenseTypes.includes('water') && (
+                      <div>
+                        <label className="text-xs text-gray-600 font-medium">💧 水污許可</label>
+                        <input type="date" className="w-full border rounded p-2 text-sm"
+                          value={newClientForm.waterExpiry || ''}
+                          onChange={e => setNewClientForm({ ...newClientForm, waterExpiry: e.target.value })} />
+                      </div>
+                    )}
+                    {newClientForm.licenseTypes.includes('toxic') && (
+                      <div>
+                        <label className="text-xs text-gray-600 font-medium">☢️ 毒化物許可</label>
+                        <input type="date" className="w-full border rounded p-2 text-sm"
+                          value={newClientForm.toxicExpiry || ''}
+                          onChange={e => setNewClientForm({ ...newClientForm, toxicExpiry: e.target.value })} />
+                      </div>
+                    )}
+                    {newClientForm.licenseTypes.includes('waste') && (
+                      <div>
+                        <label className="text-xs text-gray-600 font-medium">🗑️ 廢清書展延</label>
+                        <input type="date" className="w-full border rounded p-2 text-sm"
+                          value={newClientForm.wasteExpiry || ''}
+                          onChange={e => setNewClientForm({ ...newClientForm, wasteExpiry: e.target.value })} />
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
               <button type="submit" className="w-full bg-teal-600 text-white py-3 rounded-lg font-bold hover:bg-teal-700 transition mt-4">
                 建立案件
               </button>

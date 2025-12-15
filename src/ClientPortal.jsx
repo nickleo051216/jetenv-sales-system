@@ -190,11 +190,18 @@ const ClientPortal = () => {
         return Math.round((validLicenses / licenses.length) * 100);
     }, []);
 
-    // 輔助函式:判斷專案階段
+    // 輔助函式:判斷專案階段 (7個階段)
     const determineProjectStatus = useCallback((status) => {
-        if (status === '營運中') return 'permission';
-        if (status === '試車階段') return 'trial';
-        return 'setup';
+        const statusMap = {
+            '設置階段': 'setup',
+            '規劃階段': 'planning',
+            '設置許可申請中': 'permit-setup',
+            '試車階段': 'trial',
+            '操作許可申請中': 'permit-operate',
+            '營運中': 'operating',
+            '申請展延中': 'renewal'
+        };
+        return statusMap[status] || 'setup';
     }, []);
 
     // 輔助函式:映射許可證狀態
@@ -227,11 +234,11 @@ const ClientPortal = () => {
         if (!licenses) return formatted;
 
         licenses.forEach(license => {
-            const type = license.type;
+            const type = license.type?.toLowerCase();
             if (formatted[type]) {
                 formatted[type] = {
-                    status: mapLicenseStatus(license.status, license.valid_until),
-                    date: license.valid_until || '長期有效',
+                    status: mapLicenseStatus(license.status, license.expiration_date),
+                    date: license.expiration_date || '待確認',
                     name: license.name,
                     workflowStage: license.workflow_stage,
                     nextAction: license.next_action,
@@ -242,6 +249,34 @@ const ClientPortal = () => {
 
         return formatted;
     }, [mapLicenseStatus]);
+
+    // 輔助函式:找出最近到期的許可證日期
+    const findNearestExpiry = useCallback((licenses) => {
+        if (!licenses || licenses.length === 0) return { date: '待確認', type: null };
+
+        const typeLabels = { air: '空污', water: '水污', waste: '廢棄物', toxic: '毒化物' };
+
+        const validLicenses = licenses
+            .filter(l => l.expiration_date)
+            .map(l => ({
+                date: new Date(l.expiration_date),
+                type: l.type?.toLowerCase(),
+                label: typeLabels[l.type?.toLowerCase()] || l.type
+            }))
+            .filter(l => !isNaN(l.date.getTime()));
+
+        if (validLicenses.length === 0) return { date: '待確認', type: null };
+
+        const nearest = validLicenses.reduce((min, curr) =>
+            curr.date < min.date ? curr : min
+        );
+
+        return {
+            date: nearest.date.toISOString().split('T')[0],
+            type: nearest.type,
+            label: nearest.label
+        };
+    }, []);
 
     const handleSearch = useCallback(async (taxIdToSearch) => {
         const searchTaxId = taxIdToSearch || inputTaxId;
@@ -289,6 +324,8 @@ const ClientPortal = () => {
                 .catch(err => console.error('Failed to fetch official data:', err));
 
             // 轉換資料格式為前端需要的格式
+            const nearestExpiry = findNearestExpiry(client.licenses);
+
             const formattedResult = {
                 taxId: client.tax_id,
                 name: client.name,
@@ -304,9 +341,11 @@ const ClientPortal = () => {
                     avatarColor: 'bg-blue-600'
                 },
                 projectInfo: {
-                    deadline: client.deadline || '待確認',
+                    deadline: nearestExpiry.date,
+                    deadlineType: nearestExpiry.label, // 新增: 顯示哪個許可證
                     progress: calculateProgress(client.licenses),
-                    status: determineProjectStatus(client.status)
+                    status: determineProjectStatus(client.status),
+                    statusText: client.status // 新增: 原始狀態文字
                 },
                 licenses: formatLicenses(client.licenses),
                 tasks: [] // 如果有 tasks 表可以在這裡查詢
@@ -320,7 +359,7 @@ const ClientPortal = () => {
         } finally {
             setIsLoading(false);
         }
-    }, [calculateProgress, determineProjectStatus, formatLicenses, inputTaxId]);
+    }, [calculateProgress, determineProjectStatus, findNearestExpiry, formatLicenses, inputTaxId]);
 
     // Deep Linking: Auto-login if ?id=... exists
     useEffect(() => {
@@ -527,8 +566,13 @@ const ClientPortal = () => {
                                 <div className="p-3 bg-red-50 text-red-500 rounded-full mb-2">
                                     <Calendar size={32} />
                                 </div>
-                                <p className="text-gray-500 text-sm font-bold mb-1">最近截止日期</p>
+                                <p className="text-gray-500 text-sm font-bold mb-1">最近許可到期日</p>
                                 <p className="text-2xl font-black text-gray-800">{searchResult.projectInfo.deadline}</p>
+                                {searchResult.projectInfo.deadlineType && (
+                                    <span className="text-xs text-red-600 bg-red-50 px-2 py-0.5 rounded mt-1">
+                                        {searchResult.projectInfo.deadlineType}
+                                    </span>
+                                )}
                             </div>
 
                             <div className="bg-white p-6 rounded-2xl shadow-lg border-b-4 border-blue-400 flex flex-col items-center justify-center">
@@ -549,9 +593,14 @@ const ClientPortal = () => {
                                     <Activity size={32} />
                                 </div>
                                 <p className="text-gray-500 text-sm font-bold mb-1">目前專案階段</p>
-                                <span className="text-2xl font-black text-purple-700 mt-1">
-                                    {searchResult.projectInfo.status === 'permission' ? '許可申請中' :
-                                        searchResult.projectInfo.status === 'trial' ? '試車階段' : '設置階段'}
+                                <span className="text-xl font-black text-purple-700 mt-1 text-center">
+                                    {searchResult.projectInfo.status === 'setup' ? '🔧 設置階段' :
+                                        searchResult.projectInfo.status === 'planning' ? '📋 規劃階段' :
+                                            searchResult.projectInfo.status === 'permit-setup' ? '📝 設置許可申請中' :
+                                                searchResult.projectInfo.status === 'trial' ? '⚙️ 試車階段' :
+                                                    searchResult.projectInfo.status === 'permit-operate' ? '📄 操作許可申請中' :
+                                                        searchResult.projectInfo.status === 'operating' ? '🟢 營運中' :
+                                                            searchResult.projectInfo.status === 'renewal' ? '🔄 申請展延中' : '🔧 設置階段'}
                                 </span>
                             </div>
                         </div>
