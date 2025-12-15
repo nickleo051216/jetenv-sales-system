@@ -435,25 +435,87 @@ const ClientView = () => {
     }
   };
 
-  // 更新客戶
+  // 更新客戶 (合併版 - 支援進度、基本資料、許可證期限)
   const handleUpdateClient = async (e) => {
     e.preventDefault();
     try {
-      const phaseMap = { '規劃階段': 1, '試車階段': 2, '營運中': 3 };
+      // 階段對應 phase 數字：1-3 新設前期，4-5 試車申請，6 營運，7 展延
+      const phaseMap = {
+        '設置階段': 1,
+        '規劃階段': 2,
+        '設置許可申請中': 3,
+        '試車階段': 4,
+        '操作許可申請中': 5,
+        '營運中': 6,
+        '申請展延中': 7
+      };
 
-      const { error } = await supabase
+      // 1. 更新客戶基本資料
+      const { error: clientError } = await supabase
         .from('clients')
         .update({
+          name: editingClient.name,
+          tax_id: editingClient.taxId,
           status: editingClient.status,
           phase: phaseMap[editingClient.status] || editingClient.phase,
-          current_progress: editingClient.currentProgress,  // 新增：目前進度
+          current_progress: editingClient.currentProgress,
           next_action: editingClient.nextAction,
-          remarks: editingClient.remarks,                   // 新增：備註
+          remarks: editingClient.remarks,
           deadline: editingClient.deadline || null
         })
         .eq('id', editingClient.id);
 
-      if (error) throw error;
+      if (clientError) throw clientError;
+
+      // 2. 如果有編輯委託項目 (licenseTypes)，處理新增/刪除
+      if (editingClient.licenseTypes) {
+        const originalTypes = editingClient.licenses?.map(l => l.type.toLowerCase()) || [];
+        const newTypes = editingClient.licenseTypes.map(t => t.toLowerCase());
+
+        // 找出要新增的
+        const toAdd = newTypes.filter(t => !originalTypes.includes(t));
+        // 找出要刪除的
+        const toRemove = originalTypes.filter(t => !newTypes.includes(t));
+
+        // 新增
+        if (toAdd.length > 0) {
+          const licensesToInsert = toAdd.map(type => ({
+            client_id: editingClient.id,
+            type: type,
+            status: 'pending',
+            name: `${type.toUpperCase()} 許可證`,
+            workflow_stage: editingClient.status
+          }));
+          const { error: addError } = await supabase.from('licenses').insert(licensesToInsert);
+          if (addError) console.error('新增委託項目失敗:', addError);
+        }
+
+        // 刪除
+        if (toRemove.length > 0) {
+          const { error: removeError } = await supabase
+            .from('licenses')
+            .delete()
+            .eq('client_id', editingClient.id)
+            .in('type', toRemove);
+          if (removeError) console.error('刪除委託項目失敗:', removeError);
+        }
+      }
+
+      // 3. 更新許可證到期日
+      if (editingClient.licenses) {
+        for (const license of editingClient.licenses) {
+          if (license.id && license.expiration_date !== undefined) {
+            const { error: licenseError } = await supabase
+              .from('licenses')
+              .update({
+                expiration_date: license.expiration_date || null,
+                status: license.expiration_date ? 'valid' : license.status
+              })
+              .eq('id', license.id);
+            if (licenseError) console.error('更新許可證失敗:', licenseError);
+          }
+        }
+      }
 
       alert('✅ 客戶資料更新成功！');
       setEditingClient(null);
@@ -965,167 +1027,235 @@ const ClientView = () => {
         </div>
       )}
 
-      {/* 編輯客戶 Modal */}
-      {/* 編輯客戶 Modal (更新進度) */}
+      {/* 合併版編輯客戶 Modal */}
       {editingClient && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4" onClick={() => setEditingClient(null)}>
-          <div className="bg-white rounded-2xl p-6 max-w-md w-full shadow-2xl" onClick={e => e.stopPropagation()}>
+          <div className="bg-white rounded-2xl p-6 max-w-lg w-full shadow-2xl max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+            {/* Header */}
             <div className="flex justify-between items-start mb-4">
               <div>
-                <div className="flex items-center gap-2">
-                  <h3 className="font-bold text-lg text-gray-800">{editingClient.name}</h3>
-                  <button
-                    onClick={() => setEditInfoClient({ ...editingClient, licenseTypes: editingClient.licenses.map(l => l.type) })}
-                    className="text-gray-400 hover:text-blue-500 transition-colors p-1"
-                    title="編輯基本資料"
-                  >
-                    <Edit2 className="w-4 h-4" />
-                  </button>
-                </div>
-                <div className="flex items-center text-sm text-gray-500 mt-1">
-                  <span className="font-mono bg-gray-100 px-2 py-0.5 rounded text-xs mr-2">{editingClient.taxId}</span>
-                </div>
+                <h3 className="font-bold text-xl text-gray-800">{editingClient.name}</h3>
+                <span className="font-mono bg-gray-100 px-2 py-0.5 rounded text-xs text-gray-500">{editingClient.taxId}</span>
               </div>
               <button onClick={() => setEditingClient(null)} className="text-gray-400 hover:text-gray-600">
                 <X className="w-5 h-5" />
               </button>
             </div>
-            <form onSubmit={handleUpdateClient} className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">變更階段</label>
-                <select className="w-full border rounded-lg p-2" value={editingClient.status} onChange={e => setEditingClient({ ...editingClient, status: e.target.value })}>
-                  <option value="規劃階段">規劃階段</option>
-                  <option value="試車階段">試車階段</option>
-                  <option value="營運中">營運中</option>
-                </select>
-              </div>
 
-              {/* 目前進度 */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  <Activity className="w-3 h-3 inline mr-1" />
-                  目前進度
-                </label>
-                <input
-                  type="text"
-                  className="w-full border rounded-lg p-2"
-                  value={editingClient.currentProgress || ''}
-                  onChange={e => setEditingClient({ ...editingClient, currentProgress: e.target.value })}
-                  placeholder="例如：mail出去了、已有業務行動"
-                />
-              </div>
-
-              {/* 下一步動作 */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  <ChevronRight className="w-3 h-3 inline mr-1" />
-                  下一步動作
-                </label>
-                <input
-                  type="text"
-                  className="w-full border rounded-lg p-2"
-                  value={editingClient.nextAction || ''}
-                  onChange={e => setEditingClient({ ...editingClient, nextAction: e.target.value })}
-                  placeholder="例如：待回覆、上白"
-                />
-              </div>
-
-              {/* 備註 */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  <FileText className="w-3 h-3 inline mr-1" />
-                  備註
-                </label>
-                <select
-                  className="w-full border rounded-lg p-2"
-                  value={editingClient.remarks || ''}
-                  onChange={e => setEditingClient({ ...editingClient, remarks: e.target.value })}
-                >
-                  <option value="">無</option>
-                  <option value="可拜訪">可拜訪</option>
-                  <option value="查無資料">查無資料</option>
-                  <option value="剛換發">剛換發</option>
-                  <option value="自行申報">自行申報</option>
-                  <option value="待觀察">待觀察</option>
-                  <option value="自己人">自己人</option>
-                </select>
-              </div>
-
-              {/* 期限 */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  <Clock className="w-3 h-3 inline mr-1" />
-                  截止期限
-                </label>
-                <input type="date" className="w-full border rounded-lg p-2" value={editingClient.deadline} onChange={e => setEditingClient({ ...editingClient, deadline: e.target.value })} />
-              </div>
-              <div className="pt-4 border-t border-gray-100 flex gap-2">
-                <button type="button" onClick={() => setEditingClient(null)} className="flex-1 bg-gray-100 text-gray-600 py-3 rounded-lg font-bold hover:bg-gray-200 transition">
-                  取消
-                </button>
-                <button type="submit" className="flex-1 bg-blue-600 text-white py-3 rounded-lg font-bold hover:bg-blue-700 transition flex items-center justify-center gap-2">
-                  <Save className="w-4 h-4" /> 儲存變更
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* 編輯客戶基本資料 Modal */}
-      {editInfoClient && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4" onClick={() => setEditInfoClient(null)}>
-          <div className="bg-white rounded-2xl p-6 max-w-md w-full shadow-2xl" onClick={e => e.stopPropagation()}>
-            <div className="flex justify-between items-center mb-6">
-              <h3 className="text-xl font-bold text-gray-800">✏️ 編輯基本資料</h3>
-              <button onClick={() => setEditInfoClient(null)} className="text-gray-400 hover:text-gray-600">
-                <X className="w-5 h-5" />
+            {/* Tab 切換 */}
+            <div className="flex border-b border-gray-200 mb-4">
+              <button
+                type="button"
+                onClick={() => setEditingClient({ ...editingClient, _tab: 'progress' })}
+                className={`px-4 py-2 text-sm font-medium border-b-2 transition ${(editingClient._tab || 'progress') === 'progress'
+                  ? 'border-teal-500 text-teal-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700'
+                  }`}
+              >
+                📋 進度更新
+              </button>
+              <button
+                type="button"
+                onClick={() => setEditingClient({ ...editingClient, _tab: 'info' })}
+                className={`px-4 py-2 text-sm font-medium border-b-2 transition ${editingClient._tab === 'info'
+                  ? 'border-teal-500 text-teal-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700'
+                  }`}
+              >
+                ✏️ 基本資料
+              </button>
+              <button
+                type="button"
+                onClick={() => setEditingClient({ ...editingClient, _tab: 'licenses' })}
+                className={`px-4 py-2 text-sm font-medium border-b-2 transition ${editingClient._tab === 'licenses'
+                  ? 'border-teal-500 text-teal-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700'
+                  }`}
+              >
+                📅 許可證期限
               </button>
             </div>
-            <form onSubmit={handleUpdateClientInfo} className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">公司名稱</label>
-                <input required type="text" className="w-full border rounded-lg p-2" value={editInfoClient.name} onChange={e => setEditInfoClient({ ...editInfoClient, name: e.target.value })} />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">統一編號</label>
-                <input required type="text" className="w-full border rounded-lg p-2 font-mono" value={editInfoClient.taxId} onChange={e => setEditInfoClient({ ...editInfoClient, taxId: e.target.value })} maxLength={8} />
-              </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">委託項目 (可多選)</label>
-                <div className="flex flex-wrap gap-2">
-                  {[
-                    { key: 'air', label: '💨 空氣', color: 'purple' },
-                    { key: 'water', label: '💧 廢水', color: 'blue' },
-                    { key: 'waste', label: '🗑️ 廢棄物', color: 'amber' },
-                    { key: 'toxic', label: '☢️ 毒化', color: 'red' },
-                    { key: 'soil', label: '🌍 土壤', color: 'green' }
-                  ].map(item => (
-                    <button
-                      key={item.key}
-                      type="button"
-                      onClick={() => {
-                        const types = editInfoClient.licenseTypes || [];
-                        if (types.includes(item.key)) {
-                          setEditInfoClient({ ...editInfoClient, licenseTypes: types.filter(t => t !== item.key) });
-                        } else {
-                          setEditInfoClient({ ...editInfoClient, licenseTypes: [...types, item.key] });
-                        }
-                      }}
-                      className={`px-3 py-1.5 text-xs rounded-full border transition ${(editInfoClient.licenseTypes || []).includes(item.key)
-                        ? `bg-${item.color}-100 text-${item.color}-700 border-${item.color}-300 ring-2 ring-${item.color}-200`
-                        : 'bg-gray-50 text-gray-500 border-gray-200 hover:bg-gray-100'
-                        }`}
+            <form onSubmit={handleUpdateClient} className="space-y-4">
+              {/* Tab 1: 進度更新 */}
+              {(editingClient._tab || 'progress') === 'progress' && (
+                <>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">專案階段</label>
+                    <select className="w-full border rounded-lg p-2" value={editingClient.status} onChange={e => setEditingClient({ ...editingClient, status: e.target.value })}>
+                      <option value="設置階段">1️⃣ 設置階段</option>
+                      <option value="規劃階段">2️⃣ 規劃階段</option>
+                      <option value="設置許可申請中">3️⃣ 設置許可/水措申請中</option>
+                      <option value="試車階段">4️⃣ 試車階段</option>
+                      <option value="操作許可申請中">5️⃣ 操作許可申請中</option>
+                      <option value="營運中">6️⃣ 營運中</option>
+                      <option value="申請展延中">7️⃣ 申請展延中</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      <Activity className="w-3 h-3 inline mr-1" />
+                      目前進度
+                    </label>
+                    <input
+                      type="text"
+                      className="w-full border rounded-lg p-2"
+                      value={editingClient.currentProgress || ''}
+                      onChange={e => setEditingClient({ ...editingClient, currentProgress: e.target.value })}
+                      placeholder="例如：mail出去了、已有業務行動"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      <ChevronRight className="w-3 h-3 inline mr-1" />
+                      下一步動作
+                    </label>
+                    <input
+                      type="text"
+                      className="w-full border rounded-lg p-2"
+                      value={editingClient.nextAction || ''}
+                      onChange={e => setEditingClient({ ...editingClient, nextAction: e.target.value })}
+                      placeholder="例如：待回覆、上白"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      <FileText className="w-3 h-3 inline mr-1" />
+                      備註
+                    </label>
+                    <select
+                      className="w-full border rounded-lg p-2"
+                      value={editingClient.remarks || ''}
+                      onChange={e => setEditingClient({ ...editingClient, remarks: e.target.value })}
                     >
-                      {item.label}
-                    </button>
-                  ))}
+                      <option value="">無</option>
+                      <option value="可拜訪">可拜訪</option>
+                      <option value="查無資料">查無資料</option>
+                      <option value="剛換發">剛換發</option>
+                      <option value="自行申報">自行申報</option>
+                      <option value="待觀察">待觀察</option>
+                      <option value="自己人">自己人</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      <Clock className="w-3 h-3 inline mr-1" />
+                      截止期限
+                    </label>
+                    <input type="date" className="w-full border rounded-lg p-2" value={editingClient.deadline || ''} onChange={e => setEditingClient({ ...editingClient, deadline: e.target.value })} />
+                  </div>
+                </>
+              )}
+
+              {/* Tab 2: 基本資料 */}
+              {editingClient._tab === 'info' && (
+                <>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">公司名稱</label>
+                    <input required type="text" className="w-full border rounded-lg p-2" value={editingClient.name} onChange={e => setEditingClient({ ...editingClient, name: e.target.value })} />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">統一編號</label>
+                    <input required type="text" className="w-full border rounded-lg p-2 font-mono" value={editingClient.taxId} onChange={e => setEditingClient({ ...editingClient, taxId: e.target.value })} maxLength={8} />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">委託項目 (可多選)</label>
+                    <div className="flex flex-wrap gap-2">
+                      {[
+                        { key: 'air', label: '💨 空氣', color: 'purple' },
+                        { key: 'water', label: '💧 廢水', color: 'blue' },
+                        { key: 'waste', label: '🗑️ 廢棄物', color: 'amber' },
+                        { key: 'toxic', label: '☢️ 毒化', color: 'red' },
+                        { key: 'soil', label: '🌍 土壤', color: 'green' }
+                      ].map(item => {
+                        const licenseTypes = editingClient.licenseTypes || editingClient.licenses?.map(l => l.type.toLowerCase()) || [];
+                        const isSelected = licenseTypes.includes(item.key);
+                        return (
+                          <button
+                            key={item.key}
+                            type="button"
+                            onClick={() => {
+                              const types = [...licenseTypes];
+                              if (isSelected) {
+                                setEditingClient({ ...editingClient, licenseTypes: types.filter(t => t !== item.key) });
+                              } else {
+                                setEditingClient({ ...editingClient, licenseTypes: [...types, item.key] });
+                              }
+                            }}
+                            className={`px-3 py-1.5 text-xs rounded-full border transition ${isSelected
+                              ? `bg-${item.color}-100 text-${item.color}-700 border-${item.color}-300 ring-2 ring-${item.color}-200`
+                              : 'bg-gray-50 text-gray-500 border-gray-200 hover:bg-gray-100'
+                              }`}
+                          >
+                            {item.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </>
+              )}
+
+              {/* Tab 3: 許可證期限 */}
+              {editingClient._tab === 'licenses' && (
+                <div className="space-y-4">
+                  <p className="text-sm text-gray-500 bg-amber-50 p-3 rounded-lg border border-amber-200">
+                    📅 編輯每個許可證的到期日。到期日會影響客戶端顯示的「最近許可到期日」。
+                  </p>
+
+                  {editingClient.licenses?.length > 0 ? (
+                    editingClient.licenses.map((license, idx) => {
+                      const typeLabels = {
+                        air: { icon: '💨', name: '空污許可' },
+                        water: { icon: '💧', name: '水污許可' },
+                        waste: { icon: '🗑️', name: '廢清書' },
+                        toxic: { icon: '☢️', name: '毒化物許可' },
+                        soil: { icon: '🌍', name: '土壤' }
+                      };
+                      const typeInfo = typeLabels[license.type.toLowerCase()] || { icon: '📄', name: license.type };
+
+                      return (
+                        <div key={license.id || idx} className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
+                          <span className="text-2xl">{typeInfo.icon}</span>
+                          <div className="flex-1">
+                            <p className="text-sm font-medium text-gray-700">{typeInfo.name}</p>
+                            <input
+                              type="date"
+                              className="w-full border rounded p-2 text-sm mt-1"
+                              value={license.expiration_date || ''}
+                              onChange={e => {
+                                const updatedLicenses = [...editingClient.licenses];
+                                updatedLicenses[idx] = { ...license, expiration_date: e.target.value };
+                                setEditingClient({ ...editingClient, licenses: updatedLicenses });
+                              }}
+                            />
+                          </div>
+                          <div className="text-right">
+                            <span className={`text-xs px-2 py-1 rounded ${license.status === 'valid' ? 'bg-green-100 text-green-700' :
+                              license.status === 'pending' ? 'bg-yellow-100 text-yellow-700' :
+                                'bg-gray-100 text-gray-600'
+                              }`}>
+                              {license.status === 'valid' ? '有效' : license.status === 'pending' ? '待確認' : license.status}
+                            </span>
+                          </div>
+                        </div>
+                      );
+                    })
+                  ) : (
+                    <div className="text-center text-gray-400 py-8">
+                      尚未設定委託項目
+                    </div>
+                  )}
                 </div>
-              </div>
+              )}
 
               <div className="pt-4 border-t border-gray-100 flex gap-2">
-                <button type="button" onClick={() => setEditInfoClient(null)} className="flex-1 bg-gray-100 text-gray-600 py-3 rounded-lg font-bold hover:bg-gray-200 transition">
+                <button type="button" onClick={() => setEditingClient(null)} className="flex-1 bg-gray-100 text-gray-600 py-3 rounded-lg font-bold hover:bg-gray-200 transition">
                   取消
                 </button>
                 <button type="submit" className="flex-1 bg-teal-600 text-white py-3 rounded-lg font-bold hover:bg-teal-700 transition flex items-center justify-center gap-2">
