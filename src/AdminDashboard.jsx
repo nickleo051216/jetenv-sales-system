@@ -772,14 +772,7 @@ const ClientView = () => {
                 onClick={() => setEditingClient(client)}
                 className="flex-1 py-2 text-sm text-teal-600 font-medium border border-teal-200 rounded hover:bg-teal-50 transition-colors"
               >
-                更新進度 →
-              </button>
-              <button
-                onClick={() => setEditInfoClient({ ...client, licenseTypes: client.licenses.map(l => l.type) })}
-                className="px-3 py-2 text-sm text-blue-600 border border-blue-200 rounded hover:bg-blue-50 transition-colors"
-                title="編輯客戶資料"
-              >
-                <Edit2 className="w-4 h-4" />
+                編輯 →
               </button>
               <button
                 onClick={() => handleDeleteClient(client.id, client.name)}
