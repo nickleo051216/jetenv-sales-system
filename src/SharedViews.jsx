@@ -165,7 +165,8 @@ export const FlowchartView = () => {
                         </div>
 
                         <div className="bg-slate-700 text-white px-6 py-3 rounded-lg text-center font-bold mt-4">
-                            🔚 廢清書提送 (結案)
+                            <div>🔚 廢清書提送 (結案)</div>
+                            <div className="text-xs mt-1 opacity-80">⏰ 需每五年辦理展延</div>
                         </div>
                     </div>
                 ) : (
@@ -268,7 +269,8 @@ export const FlowchartView = () => {
                         </div>
                         <div className="mt-8 flex justify-center">
                             <div className="bg-slate-700 text-white px-8 py-3 rounded-lg font-bold text-sm">
-                                🔚 廢清書提送 (結案)
+                                <div>🔚 廢清書提送 (結案)</div>
+                                <div className="text-xs mt-1 opacity-80">⏰ 需每五年辦理展延</div>
                             </div>
                         </div>
                     </div>
