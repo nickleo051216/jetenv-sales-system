@@ -458,10 +458,11 @@ const ClientView = () => {
           tax_id: editingClient.taxId,
           status: editingClient.status,
           phase: phaseMap[editingClient.status] || editingClient.phase,
-          current_progress: editingClient.currentProgress,
-          next_action: editingClient.nextAction,
-          remarks: editingClient.remarks,
-          deadline: editingClient.deadline || null
+          current_progress: editingClient.currentProgress || null,
+          next_action: editingClient.nextAction || null,
+          remarks: editingClient.remarks || null,
+          // 確保 deadline 是有效日期格式或 null
+          deadline: /^\d{4}-\d{2}-\d{2}$/.test(editingClient.deadline) ? editingClient.deadline : null
         })
         .eq('id', editingClient.id);
 
