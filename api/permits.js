@@ -292,6 +292,79 @@ export default async function handler(req, res) {
         }
 
         // ========================================
+        // Step 2.6: 查 air_permits 表取得空污操作許可到期日
+        // 用管編查詢，expiry_date 是民國年格式（如：114/05/12）
+        // ========================================
+        if (getSupabase() && emsNoList.length > 0) {
+            try {
+                const { data: airPermits, error: airError } = await getSupabase()
+                    .from('air_permits')
+                    .select('*')
+                    .in('ems_no', emsNoList);
+
+                if (!airError && airPermits && airPermits.length > 0) {
+                    console.log('✅ 找到空污許可:', airPermits.length, '筆');
+
+                    // 民國年轉西元年的函數
+                    const convertToWesternDate = (rocDate) => {
+                        if (!rocDate) return null;
+                        // 格式可能是 "114/05/12" 或 "114-05-12"
+                        const parts = rocDate.replace(/-/g, '/').split('/');
+                        if (parts.length === 3) {
+                            const year = parseInt(parts[0]) + 1911;
+                            const month = parts[1].padStart(2, '0');
+                            const day = parts[2].padStart(2, '0');
+                            return `${year}-${month}-${day}`;
+                        }
+                        return null;
+                    };
+
+                    // 更新 air 回傳結構
+                    results.air = {
+                        ...results.air,
+                        permits: airPermits.map(p => ({
+                            emsNo: p.ems_no,
+                            permitNo: p.permit_no,
+                            processName: p.process_name,
+                            category: p.category,
+                            effectiveDate: convertToWesternDate(p.effective_date),
+                            expiryDate: convertToWesternDate(p.expiry_date),
+                            expiryDateRoc: p.expiry_date,  // 保留原始民國年格式
+                            facilityName: p.company_name,
+                            address: p.address,
+                            county: p.county
+                        })),
+                        source: 'supabase_air_permits'
+                    };
+
+                    // 找最新到期的空污許可證（只看「操作」類別）
+                    const operationPermits = airPermits.filter(p =>
+                        p.category === '操作' && p.expiry_date
+                    );
+
+                    if (operationPermits.length > 0) {
+                        const latestAir = operationPermits.reduce((latest, current) => {
+                            const latestDate = convertToWesternDate(latest.expiry_date);
+                            const currentDate = convertToWesternDate(current.expiry_date);
+                            if (!latestDate) return current;
+                            if (!currentDate) return latest;
+                            return new Date(currentDate) > new Date(latestDate) ? current : latest;
+                        }, operationPermits[0]);
+
+                        const westernDate = convertToWesternDate(latestAir.expiry_date);
+                        results.air.latestEndDate = westernDate;
+                        results.air.latestEndDateRoc = latestAir.expiry_date;
+                        results.summary.airPermitEndDate = westernDate;
+                        results.summary.airPermitEndDateRoc = latestAir.expiry_date;
+                        results.summary.airPermitNo = latestAir.permit_no;
+                    }
+                }
+            } catch (err) {
+                console.error('空污許可查詢失敗:', err.message);
+            }
+        }
+
+        // ========================================
         // Step 3: 查 factories 表補充資料（你自己維護的）
         // ========================================
         if (getSupabase()) {
