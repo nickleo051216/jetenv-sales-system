@@ -225,11 +225,23 @@ export default async function handler(req, res) {
                     uniVariants.push(taxIdWithoutLeadingZeros);
                 }
 
-                // 先用統編查
+                // 先用 unino 查
                 let { data: toxicPermits, error: toxicError } = await getSupabase()
                     .from('toxic_permits')
                     .select('*')
-                    .or(`unino.in.(${uniVariants.join(',')}),ban.in.(${uniVariants.join(',')})`);
+                    .in('unino', uniVariants);
+
+                // 如果 unino 查不到，用 ban 查
+                if ((!toxicPermits || toxicPermits.length === 0) && !toxicError) {
+                    const { data: toxicByBan, error: banErr } = await getSupabase()
+                        .from('toxic_permits')
+                        .select('*')
+                        .in('ban', uniVariants);
+                    if (!banErr && toxicByBan) {
+                        toxicPermits = toxicByBan;
+                    }
+                }
+
 
                 // 如果統編查不到，用管編查（有些工廠只有管編沒有統編）
                 if ((!toxicPermits || toxicPermits.length === 0) && emsNoList.length > 0) {
