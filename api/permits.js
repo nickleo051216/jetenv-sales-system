@@ -9,9 +9,16 @@ import { createClient } from '@supabase/supabase-js';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://yeimehdcguwnwzkmopsu.supabase.co';
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-
-const supabase = createClient(supabaseUrl, supabaseKey);
 const API_KEY = process.env.MOENV_API_KEY || '7854a04b-f171-47bb-9e42-4dd2ecc4745b';
+
+// 延遲初始化 Supabase，避免 key 為空時報錯
+let supabase = null;
+function getSupabase() {
+    if (!supabase && supabaseKey) {
+        supabase = createClient(supabaseUrl, supabaseKey);
+    }
+    return supabase;
+}
 
 export default async function handler(req, res) {
     const { taxId } = req.query;
@@ -97,9 +104,9 @@ export default async function handler(req, res) {
         // ========================================
         // Step 2: 用管編查 Supabase water_permits 取得許可到期日
         // ========================================
-        if (emsNoList.length > 0) {
+        if (emsNoList.length > 0 && getSupabase()) {
             try {
-                const { data: waterPermits, error: supabaseError } = await supabase
+                const { data: waterPermits, error: supabaseError } = await getSupabase()
                     .from('water_permits')
                     .select('*')
                     .in('ems_no', emsNoList);
@@ -148,36 +155,38 @@ export default async function handler(req, res) {
         // ========================================
         // Step 3: 查 factories 表補充資料（你自己維護的）
         // ========================================
-        try {
-            const { data: factories, error: factoriesError } = await supabase
-                .from('factories')
-                .select('*')
-                .eq('uniformno', taxId);
+        if (getSupabase()) {
+            try {
+                const { data: factories, error: factoriesError } = await getSupabase()
+                    .from('factories')
+                    .select('*')
+                    .eq('uniformno', taxId);
 
-            if (!factoriesError && factories && factories.length > 0) {
-                console.log('✅ factories 表找到', factories.length, '筆');
+                if (!factoriesError && factories && factories.length > 0) {
+                    console.log('✅ factories 表找到', factories.length, '筆');
 
-                const factory = factories[0];
+                    const factory = factories[0];
 
-                // 如果 water_permits 沒有到期日，用 factories 的 waterreleasedate
-                if (!results.summary.waterPermitEndDate && factory.waterreleasedate) {
-                    results.summary.waterPermitEndDate = factory.waterreleasedate;
-                    results.summary.waterPermitSource = 'factories';
-                }
+                    // 如果 water_permits 沒有到期日，用 factories 的 waterreleasedate
+                    if (!results.summary.waterPermitEndDate && factory.waterreleasedate) {
+                        results.summary.waterPermitEndDate = factory.waterreleasedate;
+                        results.summary.waterPermitSource = 'factories';
+                    }
 
-                // 補充其他許可證到期日
-                if (factory.airreleasedate) {
-                    results.summary.airPermitEndDate = factory.airreleasedate;
+                    // 補充其他許可證到期日
+                    if (factory.airreleasedate) {
+                        results.summary.airPermitEndDate = factory.airreleasedate;
+                    }
+                    if (factory.wastereleasedate) {
+                        results.summary.wastePermitEndDate = factory.wastereleasedate;
+                    }
+                    if (factory.toxicreleasedate) {
+                        results.summary.toxicPermitEndDate = factory.toxicreleasedate;
+                    }
                 }
-                if (factory.wastereleasedate) {
-                    results.summary.wastePermitEndDate = factory.wastereleasedate;
-                }
-                if (factory.toxicreleasedate) {
-                    results.summary.toxicPermitEndDate = factory.toxicreleasedate;
-                }
+            } catch (err) {
+                console.error('factories 表查詢失敗:', err.message);
             }
-        } catch (err) {
-            console.error('factories 表查詢失敗:', err.message);
         }
 
         console.log('✅ 許可證查詢完成:', results.found ? '有資料' : '無資料');
