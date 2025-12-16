@@ -103,9 +103,55 @@ export default async function handler(req, res) {
         }
 
         // ========================================
-        // Step 2: 用管編查 Supabase water_permits 取得許可到期日
+        // Step 1.5: 優先用統編直接查 Supabase water_permits
+        // （因為你同步的 Sheets 資料有統編！）
         // ========================================
-        if (emsNoList.length > 0 && getSupabase()) {
+        if (getSupabase()) {
+            try {
+                const { data: waterByBan, error: banError } = await getSupabase()
+                    .from('water_permits')
+                    .select('*')
+                    .eq('ban', taxId);
+
+                if (!banError && waterByBan && waterByBan.length > 0) {
+                    console.log('✅ 用統編直接找到水污許可:', waterByBan.length, '筆');
+
+                    results.water = {
+                        found: true,
+                        count: waterByBan.length,
+                        source: 'supabase_ban',
+                        permits: waterByBan.map(p => ({
+                            emsNo: p.ems_no,
+                            permitNo: p.per_no,
+                            startDate: p.per_sdate,
+                            endDate: p.per_edate,
+                            permitType: p.per_type,
+                            facilityName: p.fac_name,
+                            address: p.address
+                        }))
+                    };
+
+                    // 找最新到期的許可證
+                    const validPermits = waterByBan.filter(p => p.per_edate);
+                    if (validPermits.length > 0) {
+                        const latestPermit = validPermits.reduce((latest, current) => {
+                            return new Date(current.per_edate) > new Date(latest.per_edate) ? current : latest;
+                        }, validPermits[0]);
+
+                        results.water.latestEndDate = latestPermit.per_edate;
+                        results.summary.waterPermitEndDate = latestPermit.per_edate;
+                        results.summary.waterPermitNo = latestPermit.per_no;
+                    }
+                }
+            } catch (err) {
+                console.error('用統編查 water_permits 失敗:', err.message);
+            }
+        }
+
+        // ========================================
+        // Step 2: 如果統編找不到，用管編查 Supabase water_permits
+        // ========================================
+        if (!results.water?.found && emsNoList.length > 0 && getSupabase()) {
             try {
                 const { data: waterPermits, error: supabaseError } = await getSupabase()
                     .from('water_permits')
