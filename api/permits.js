@@ -73,12 +73,12 @@ export default async function handler(req, res) {
                     isWasteControlled: r.iswaste === '1' || r.iswaste === 'Y',
                     isToxicControlled: r.istoxic === '1' || r.istoxic === 'Y',
                     isSoilControlled: r.issoil === '1' || r.issoil === 'Y',
-                    // 解列日期（曾列管但已解列）
-                    airDelistDate: r.airliftdate || r.airdelistdate || null,
-                    waterDelistDate: r.waterliftdate || r.waterdelistdate || null,
-                    wasteDelistDate: r.wasteliftdate || r.wastedelistdate || null,
-                    toxicDelistDate: r.toxicliftdate || r.toxicdelistdate || null,
-                    soilDelistDate: r.soilliftdate || r.soildelistdate || null
+                    // 解列日期（曾列管但已解列）- 欄位名稱來自 EMS_S_01 API
+                    airDelistDate: r.airreleasedate || null,
+                    waterDelistDate: r.waterreleasedate || null,
+                    wasteDelistDate: r.wastereleasedate || null,
+                    toxicDelistDate: r.toxicreleasedate || null,
+                    soilDelistDate: r.soilreleasedate || null
                 }));
 
                 // 取得所有管編
