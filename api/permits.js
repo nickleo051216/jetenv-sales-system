@@ -78,16 +78,28 @@ export default async function handler(req, res) {
                 emsNoList = [...new Set(s01Data.records.map(r => r.emsno).filter(Boolean))];
                 console.log('📋 管編列表:', emsNoList.join(', '));
 
-                // 設定 summary（用第一個工廠的資訊）
+                // 設定 summary（聚合所有工廠的列管狀態）
+                // 🔥 修正：只要任一工廠有列管，就設為 true
                 if (results.facilities.length > 0) {
-                    const f = results.facilities[0];
-                    results.summary.controlNo = f.emsNo;
-                    results.summary.facilityName = f.facilityName;
-                    results.summary.isAirControlled = f.isAirControlled;
-                    results.summary.isWaterControlled = f.isWaterControlled;
-                    results.summary.isWasteControlled = f.isWasteControlled;
-                    results.summary.isToxicControlled = f.isToxicControlled;
-                    results.summary.isSoilControlled = f.isSoilControlled;
+                    // 找主要工廠（有行業別的那個）
+                    const mainFactory = results.facilities.find(f => f.industryName) || results.facilities[0];
+
+                    results.summary.controlNo = mainFactory.emsNo;
+                    results.summary.facilityName = mainFactory.facilityName;
+
+                    // 聚合所有工廠的列管狀態（任一為 true 就是 true）
+                    results.summary.isAirControlled = results.facilities.some(f => f.isAirControlled);
+                    results.summary.isWaterControlled = results.facilities.some(f => f.isWaterControlled);
+                    results.summary.isWasteControlled = results.facilities.some(f => f.isWasteControlled);
+                    results.summary.isToxicControlled = results.facilities.some(f => f.isToxicControlled);
+                    results.summary.isSoilControlled = results.facilities.some(f => f.isSoilControlled);
+
+                    console.log('📊 聚合列管狀態:', {
+                        air: results.summary.isAirControlled,
+                        water: results.summary.isWaterControlled,
+                        waste: results.summary.isWasteControlled,
+                        toxic: results.summary.isToxicControlled
+                    });
                 }
 
                 // 設定 air（相容舊格式）
