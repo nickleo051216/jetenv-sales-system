@@ -177,8 +177,8 @@ const ClientView = () => {
       console.log('🏭 工廠結果:', factoryResult);
       console.log('📄 許可證結果:', permitsResult);
 
-      // 如果兩個都查不到資料
-      if (!moeaResult.found && !factoryResult.found) {
+      // 如果三個都查不到資料
+      if (!moeaResult.found && !factoryResult.found && !permitsResult.found) {
         alert('❌ 找不到此統編資料，請確認是否輸入正確。');
         return;
       }
@@ -266,6 +266,12 @@ const ClientView = () => {
       if (permitsResult.found) {
         setPermitsData(permitsResult);
 
+        // 🔥 如果還沒有公司名稱，從 permits API 取得
+        if (!formData.name && permitsResult.summary?.facilityName) {
+          formData.name = permitsResult.summary.facilityName;
+          console.log('📋 從許可證 API 取得公司名稱:', formData.name);
+        }
+
         // 🔥 如果查到水污許可,自動勾選「廢水」委託項目
         if (permitsResult.water?.found && permitsResult.water.count > 0) {
           if (!autoSelectedLicenses.includes('water')) {
@@ -292,6 +298,10 @@ const ClientView = () => {
           if (s.isToxicControlled && !autoSelectedLicenses.includes('toxic')) {
             autoSelectedLicenses.push('toxic');
             console.log('☢️ 列管狀態:毒化物列管,自動勾選毒化');
+          }
+          if (s.isSoilControlled && !autoSelectedLicenses.includes('soil')) {
+            autoSelectedLicenses.push('soil');
+            console.log('🌍 列管狀態:土壤列管,自動勾選土壤');
           }
         }
 
