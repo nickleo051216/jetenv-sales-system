@@ -308,21 +308,21 @@ const ClientView = () => {
         // 更新表單的委託項目
         formData.licenseTypes = autoSelectedLicenses;
 
-        // 🔥 自動填入許可證到期日
+        // 🔥 自動填入許可證到期日（清理可能的換行符號）
         if (permitsResult.summary?.waterPermitEndDate) {
-          formData.waterExpiry = permitsResult.summary.waterPermitEndDate;
+          formData.waterExpiry = permitsResult.summary.waterPermitEndDate.replace(/[\r\n]/g, '');
           console.log('📅 水污許可到期日:', formData.waterExpiry);
         }
         if (permitsResult.summary?.airPermitEndDate) {
-          formData.airExpiry = permitsResult.summary.airPermitEndDate;
+          formData.airExpiry = permitsResult.summary.airPermitEndDate.replace(/[\r\n]/g, '');
           console.log('📅 空污許可到期日:', formData.airExpiry);
         }
         if (permitsResult.summary?.wastePermitEndDate) {
-          formData.wasteExpiry = permitsResult.summary.wastePermitEndDate;
+          formData.wasteExpiry = permitsResult.summary.wastePermitEndDate.replace(/[\r\n]/g, '');
           console.log('📅 廢棄物許可到期日:', formData.wasteExpiry);
         }
         if (permitsResult.summary?.toxicPermitEndDate) {
-          formData.toxicExpiry = permitsResult.summary.toxicPermitEndDate;
+          formData.toxicExpiry = permitsResult.summary.toxicPermitEndDate.replace(/[\r\n]/g, '');
           console.log('📅 毒化物許可到期日:', formData.toxicExpiry);
         }
       }
@@ -352,9 +352,18 @@ const ClientView = () => {
         message += `\n📅 已自動設定期限：${formData.deadline}`;
       }
 
-      // 顯示水污許可到期日
+      // 顯示許可證到期日
       if (permitsResult.found && permitsResult.summary?.waterPermitEndDate) {
         message += `\n💧 水污許可到期日：${permitsResult.summary.waterPermitEndDate}`;
+      }
+      if (permitsResult.found && permitsResult.summary?.airPermitEndDate) {
+        // 清理可能的換行符號
+        const airDate = permitsResult.summary.airPermitEndDate.replace(/[\r\n]/g, '');
+        const airDateRoc = permitsResult.summary.airPermitEndDateRoc?.replace(/[\r\n]/g, '') || '';
+        message += `\n💨 空污許可到期日：${airDate}${airDateRoc ? ` (${airDateRoc})` : ''}`;
+      }
+      if (permitsResult.found && permitsResult.summary?.toxicPermitEndDate) {
+        message += `\n☢️ 毒化物許可到期日：${permitsResult.summary.toxicPermitEndDate}`;
       }
 
       // 顯示列管狀態
