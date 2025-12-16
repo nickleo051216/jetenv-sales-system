@@ -121,6 +121,9 @@ export default async function handler(req, res) {
                     .select('*')
                     .in('ban', banVariants);  // 同時查兩種格式
 
+                // Debug log
+                console.log('🔍 water_permits 查詢:', { banVariants, error: banError?.message, count: waterByBan?.length });
+
                 if (!banError && waterByBan && waterByBan.length > 0) {
                     console.log('✅ 用統編直接找到水污許可:', waterByBan.length, '筆');
 
