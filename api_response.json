@@ -1,0 +1,37 @@
+﻿
+
+StatusCode        : 200
+StatusDescription : OK
+Content           : {
+                        "fields": [
+                            {
+                                "id": "ems_no",
+                                "type": "text",
+                                "info": {
+                                    "label": "ç®¡å¶ä
+                    ºæ¥­ç·¨è"
+                                }
+                            },
+                            {
+                                "...
+RawContent        : HTTP/1.1 200 OK
+                    Pragma: no-cache
+                    Access-Control-Allow-Origin: *
+                    Access-Control-Allow-Methods: GET
+                    Content-Length: 7205
+                    Cache-Control: no-store, no-cache
+                    , must-revalidate
+                    Content-Type: applicatio...
+Forms             : {}
+Headers           : {[Pragma, no-cache], [Access-Cont
+                    rol-Allow-Origin, *], [Access-Con
+                    trol-Allow-Methods, GET], [Conten
+                    t-Length, 7205]...}
+Images            : {}
+InputFields       : {}
+Links             : {}
+ParsedHtml        : mshtml.HTMLDocumentClass
+RawContentLength  : 7205
+
+
+
