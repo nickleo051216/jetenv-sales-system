@@ -183,8 +183,8 @@ const ClientView = () => {
         return;
       }
 
-      // 準備表單資料
-      let formData = { ...newClientForm };
+      // 準備表單資料（清空 name，讓 API 結果覆蓋）
+      let formData = { ...newClientForm, name: '' };  // 🔥 清空 name，讓自動帶入覆蓋
       let autoSelectedLicenses = [];
 
       // 1. 處理工廠資料（優先使用）
@@ -194,7 +194,7 @@ const ClientView = () => {
         // 如果有多個工廠，使用第一個（之後可以讓用戶選擇）
         const factoryInfo = Array.isArray(factory) ? factory[0] : factory;
 
-        formData.name = factoryInfo.facilityName || formData.name;
+        formData.name = factoryInfo.facilityName || '';
         formData.industry = factoryInfo.industryName || '';
 
         // 🎯 自動勾選委託項目（根據工廠資料的 licenses）
@@ -255,8 +255,8 @@ const ClientView = () => {
       // 2. 處理經濟部資料（補充資訊）
       if (moeaResult.found) {
         const company = moeaResult.data;
-        // 如果工廠資料沒有提供公司名稱，使用經濟部資料
-        if (!formData.name) {
+        // 直接使用經濟部的公司名稱（如果工廠資料沒有的話）
+        if (!formData.name && company.name) {
           formData.name = company.name;
         }
         setMoeaData(company); // 儲存完整經濟部資料
