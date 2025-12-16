@@ -214,6 +214,7 @@ export default async function handler(req, res) {
 
         // ========================================
         // Step 2.5: 查 toxic_permits 表取得毒化物許可到期日
+        // 先用統編查，沒結果再用管編查（有些工廠只有管編沒有統編）
         // ========================================
         if (getSupabase()) {
             try {
@@ -224,13 +225,27 @@ export default async function handler(req, res) {
                     uniVariants.push(taxIdWithoutLeadingZeros);
                 }
 
-                const { data: toxicPermits, error: toxicError } = await getSupabase()
+                // 先用統編查
+                let { data: toxicPermits, error: toxicError } = await getSupabase()
                     .from('toxic_permits')
                     .select('*')
                     .or(`unino.in.(${uniVariants.join(',')}),ban.in.(${uniVariants.join(',')})`);
 
+                // 如果統編查不到，用管編查（有些工廠只有管編沒有統編）
+                if ((!toxicPermits || toxicPermits.length === 0) && emsNoList.length > 0) {
+                    console.log('📋 用管編查毒化物許可:', emsNoList.join(', '));
+                    const { data: toxicByEms, error: toxicByEmsError } = await getSupabase()
+                        .from('toxic_permits')
+                        .select('*')
+                        .in('ems_no', emsNoList);
+
+                    if (!toxicByEmsError && toxicByEms) {
+                        toxicPermits = toxicByEms;
+                    }
+                }
+
                 if (!toxicError && toxicPermits && toxicPermits.length > 0) {
-                    console.log('✅ 用統編找到毒化物許可:', toxicPermits.length, '筆');
+                    console.log('✅ 找到毒化物許可:', toxicPermits.length, '筆');
 
                     results.toxic = {
                         found: true,
