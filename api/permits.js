@@ -213,6 +213,58 @@ export default async function handler(req, res) {
         }
 
         // ========================================
+        // Step 2.5: 查 toxic_permits 表取得毒化物許可到期日
+        // ========================================
+        if (getSupabase()) {
+            try {
+                // 準備兩種格式的統編：原始 + 去掉前導零
+                const taxIdWithoutLeadingZeros = taxId.replace(/^0+/, '');
+                const uniVariants = [taxId];
+                if (taxIdWithoutLeadingZeros !== taxId) {
+                    uniVariants.push(taxIdWithoutLeadingZeros);
+                }
+
+                const { data: toxicPermits, error: toxicError } = await getSupabase()
+                    .from('toxic_permits')
+                    .select('*')
+                    .or(`unino.in.(${uniVariants.join(',')}),ban.in.(${uniVariants.join(',')})`);
+
+                if (!toxicError && toxicPermits && toxicPermits.length > 0) {
+                    console.log('✅ 用統編找到毒化物許可:', toxicPermits.length, '筆');
+
+                    results.toxic = {
+                        found: true,
+                        count: toxicPermits.length,
+                        source: 'supabase',
+                        permits: toxicPermits.map(p => ({
+                            emsNo: p.ems_no,
+                            permitNo: p.per_no,
+                            startDate: p.sdate,
+                            endDate: p.edate,
+                            facilityName: p.fac_name,
+                            chemicalName: p.emi_item,
+                            status: p.per_status
+                        }))
+                    };
+
+                    // 找最新到期的毒化物許可證
+                    const validToxicPermits = toxicPermits.filter(p => p.edate);
+                    if (validToxicPermits.length > 0) {
+                        const latestToxic = validToxicPermits.reduce((latest, current) => {
+                            return new Date(current.edate) > new Date(latest.edate) ? current : latest;
+                        }, validToxicPermits[0]);
+
+                        results.toxic.latestEndDate = latestToxic.edate;
+                        results.summary.toxicPermitEndDate = latestToxic.edate;
+                        results.summary.toxicPermitNo = latestToxic.per_no;
+                    }
+                }
+            } catch (err) {
+                console.error('毒化物許可查詢失敗:', err.message);
+            }
+        }
+
+        // ========================================
         // Step 3: 查 factories 表補充資料（你自己維護的）
         // ========================================
         if (getSupabase()) {
