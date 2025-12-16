@@ -105,13 +105,21 @@ export default async function handler(req, res) {
         // ========================================
         // Step 1.5: 優先用統編直接查 Supabase water_permits
         // （因為你同步的 Sheets 資料有統編！）
+        // 注意：Sheets 可能把統編當數字存，前導零會被去掉
         // ========================================
         if (getSupabase()) {
             try {
+                // 準備兩種格式的統編：原始 + 去掉前導零
+                const taxIdWithoutLeadingZeros = taxId.replace(/^0+/, '');
+                const banVariants = [taxId];
+                if (taxIdWithoutLeadingZeros !== taxId) {
+                    banVariants.push(taxIdWithoutLeadingZeros);
+                }
+
                 const { data: waterByBan, error: banError } = await getSupabase()
                     .from('water_permits')
                     .select('*')
-                    .eq('ban', taxId);
+                    .in('ban', banVariants);  // 同時查兩種格式
 
                 if (!banError && waterByBan && waterByBan.length > 0) {
                     console.log('✅ 用統編直接找到水污許可:', waterByBan.length, '筆');
