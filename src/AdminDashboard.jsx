@@ -307,6 +307,24 @@ const ClientView = () => {
 
         // 更新表單的委託項目
         formData.licenseTypes = autoSelectedLicenses;
+
+        // 🔥 自動填入許可證到期日
+        if (permitsResult.summary?.waterPermitEndDate) {
+          formData.waterExpiry = permitsResult.summary.waterPermitEndDate;
+          console.log('📅 水污許可到期日:', formData.waterExpiry);
+        }
+        if (permitsResult.summary?.airPermitEndDate) {
+          formData.airExpiry = permitsResult.summary.airPermitEndDate;
+          console.log('📅 空污許可到期日:', formData.airExpiry);
+        }
+        if (permitsResult.summary?.wastePermitEndDate) {
+          formData.wasteExpiry = permitsResult.summary.wastePermitEndDate;
+          console.log('📅 廢棄物許可到期日:', formData.wasteExpiry);
+        }
+        if (permitsResult.summary?.toxicPermitEndDate) {
+          formData.toxicExpiry = permitsResult.summary.toxicPermitEndDate;
+          console.log('📅 毒化物許可到期日:', formData.toxicExpiry);
+        }
       }
 
       // 更新表單
