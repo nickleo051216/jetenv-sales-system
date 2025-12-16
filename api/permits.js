@@ -85,6 +85,7 @@ export default async function handler(req, res) {
                     results.summary.isWaterControlled = f.isWaterControlled;
                     results.summary.isWasteControlled = f.isWasteControlled;
                     results.summary.isToxicControlled = f.isToxicControlled;
+                    results.summary.isSoilControlled = f.isSoilControlled;
                 }
 
                 // 設定 air（相容舊格式）
