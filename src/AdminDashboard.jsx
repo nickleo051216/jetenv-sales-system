@@ -366,16 +366,34 @@ const ClientView = () => {
         message += `\n☢️ 毒化物許可到期日：${permitsResult.summary.toxicPermitEndDate}`;
       }
 
-      // 顯示列管狀態
+      // 顯示列管狀態（含解列資訊）
       if (permitsResult.found && permitsResult.summary?.controlNo) {
         const s = permitsResult.summary;
         const controlStatus = [];
+        const delistedStatus = [];
+
+        // 目前列管項目
         if (s.isAirControlled) controlStatus.push('空');
         if (s.isWaterControlled) controlStatus.push('水');
         if (s.isWasteControlled) controlStatus.push('廢');
         if (s.isToxicControlled) controlStatus.push('毒');
+
+        // 已解列項目（曾列管但現在已解列）
+        if (!s.isToxicControlled && s.toxicDelistDate) {
+          delistedStatus.push(`毒化(${s.toxicDelistDate}解列)`);
+        }
+        if (!s.isAirControlled && s.airDelistDate) {
+          delistedStatus.push(`空氣(${s.airDelistDate}解列)`);
+        }
+        if (!s.isWaterControlled && s.waterDelistDate) {
+          delistedStatus.push(`水(${s.waterDelistDate}解列)`);
+        }
+
         if (controlStatus.length > 0) {
           message += `\n🏭 列管狀態：${controlStatus.join('/')}列管 (${s.controlNo})`;
+        }
+        if (delistedStatus.length > 0) {
+          message += `\n📜 曾列管：${delistedStatus.join('、')}`;
         }
       }
 

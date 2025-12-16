@@ -59,7 +59,7 @@ export default async function handler(req, res) {
 
                 results.found = true;
 
-                // 整理工廠資料
+                // 整理工廠資料（包含解列日期）
                 results.facilities = s01Data.records.map(r => ({
                     emsNo: r.emsno,
                     facilityName: r.facilityname,
@@ -67,11 +67,18 @@ export default async function handler(req, res) {
                     county: r.county,
                     township: r.township,
                     industryName: r.industryname,
+                    // 列管狀態
                     isAirControlled: r.isair === '1' || r.isair === 'Y',
                     isWaterControlled: r.iswater === '1' || r.iswater === 'Y',
                     isWasteControlled: r.iswaste === '1' || r.iswaste === 'Y',
                     isToxicControlled: r.istoxic === '1' || r.istoxic === 'Y',
-                    isSoilControlled: r.issoil === '1' || r.issoil === 'Y'
+                    isSoilControlled: r.issoil === '1' || r.issoil === 'Y',
+                    // 解列日期（曾列管但已解列）
+                    airDelistDate: r.airliftdate || r.airdelistdate || null,
+                    waterDelistDate: r.waterliftdate || r.waterdelistdate || null,
+                    wasteDelistDate: r.wasteliftdate || r.wastedelistdate || null,
+                    toxicDelistDate: r.toxicliftdate || r.toxicdelistdate || null,
+                    soilDelistDate: r.soilliftdate || r.soildelistdate || null
                 }));
 
                 // 取得所有管編
@@ -94,11 +101,27 @@ export default async function handler(req, res) {
                     results.summary.isToxicControlled = results.facilities.some(f => f.isToxicControlled);
                     results.summary.isSoilControlled = results.facilities.some(f => f.isSoilControlled);
 
+                    // 聚合解列日期（找最新的解列日期）
+                    const findLatestDelistDate = (field) => {
+                        const dates = results.facilities
+                            .map(f => f[field])
+                            .filter(d => d && d !== 'null');
+                        if (dates.length === 0) return null;
+                        return dates.sort().reverse()[0]; // 最新日期
+                    };
+
+                    results.summary.airDelistDate = findLatestDelistDate('airDelistDate');
+                    results.summary.waterDelistDate = findLatestDelistDate('waterDelistDate');
+                    results.summary.wasteDelistDate = findLatestDelistDate('wasteDelistDate');
+                    results.summary.toxicDelistDate = findLatestDelistDate('toxicDelistDate');
+                    results.summary.soilDelistDate = findLatestDelistDate('soilDelistDate');
+
                     console.log('📊 聚合列管狀態:', {
                         air: results.summary.isAirControlled,
                         water: results.summary.isWaterControlled,
                         waste: results.summary.isWasteControlled,
-                        toxic: results.summary.isToxicControlled
+                        toxic: results.summary.isToxicControlled,
+                        toxicDelistDate: results.summary.toxicDelistDate
                     });
                 }
 
