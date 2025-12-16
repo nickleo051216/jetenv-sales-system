@@ -7,18 +7,20 @@
 
 import { createClient } from '@supabase/supabase-js';
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://yeimehdcguwnwzkmopsu.supabase.co';
-const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+// 使用與 factories.js 相同的環境變數名稱
+const supabaseUrl = process.env.VITE_SUPABASE_URL;
+const supabaseKey = process.env.VITE_SUPABASE_ANON_KEY;
 const API_KEY = process.env.MOENV_API_KEY || '7854a04b-f171-47bb-9e42-4dd2ecc4745b';
 
-// 延遲初始化 Supabase，避免 key 為空時報錯
+// 初始化 Supabase
 let supabase = null;
 function getSupabase() {
-    if (!supabase && supabaseKey) {
+    if (!supabase && supabaseUrl && supabaseKey) {
         supabase = createClient(supabaseUrl, supabaseKey);
     }
     return supabase;
 }
+
 
 export default async function handler(req, res) {
     const { taxId } = req.query;
