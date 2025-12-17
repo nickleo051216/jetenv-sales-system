@@ -3,6 +3,7 @@ import { initialClients, regulationsData } from './data/clients';
 import { useNavigate } from 'react-router-dom';
 import { FlowchartView, ComplianceView, RegulationLibraryView } from './SharedViews';
 import { supabase } from './supabaseClient';
+import CalendarSettingsModal from './components/CalendarSettingsModal';
 import {
   Calendar,
   FileText,
@@ -89,6 +90,7 @@ const ClientView = () => {
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [editingClient, setEditingClient] = useState(null); // 進度更新
   const [editInfoClient, setEditInfoClient] = useState(null); // 基本資料編輯
+  const [calendarSettingsClient, setCalendarSettingsClient] = useState(null); // 行事曆設定
   const [moeaData, setMoeaData] = useState(null); // 經濟部資料
   const [factoryData, setFactoryData] = useState(null); // 工廠資料（從 factories 表）
   const [permitsData, setPermitsData] = useState(null); // 許可證資料（從環境部 API）
@@ -831,6 +833,13 @@ const ClientView = () => {
                 編輯 →
               </button>
               <button
+                onClick={() => setCalendarSettingsClient(client)}
+                className="px-3 py-2 text-sm text-purple-500 border border-purple-200 rounded hover:bg-purple-50 transition-colors"
+                title="行事曆設定"
+              >
+                <Calendar className="w-4 h-4" />
+              </button>
+              <button
                 onClick={() => handleDeleteClient(client.id, client.name)}
                 className="px-3 py-2 text-sm text-gray-400 border border-gray-200 rounded hover:bg-red-50 hover:text-red-600 hover:border-red-200 transition-colors"
                 title="刪除案件"
@@ -1314,6 +1323,15 @@ const ClientView = () => {
             </form>
           </div>
         </div>
+      )}
+
+      {/* 行事曆設定 Modal */}
+      {calendarSettingsClient && (
+        <CalendarSettingsModal
+          client={calendarSettingsClient}
+          onClose={() => setCalendarSettingsClient(null)}
+          onSave={() => fetchClients()}
+        />
       )}
     </div>
   );

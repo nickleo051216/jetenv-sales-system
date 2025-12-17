@@ -281,14 +281,90 @@ export const FlowchartView = () => {
 };
 
 // Compliance View - 申報行事曆
-export const ComplianceView = () => {
+export const ComplianceView = ({ client }) => {
     const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth() + 1);
+    const [filteredRegulations, setFilteredRegulations] = useState([]);
+    const [loading, setLoading] = useState(!!client);
+
+    // 許可證類型對應申報項目類別的映射
+    const LICENSE_TO_CATEGORY = {
+        'air': ['air'],
+        'water': ['water'],
+        'waste': ['waste'],
+        'toxic': ['toxic'],
+        'soil': ['soil'],
+        'factory': ['factory']
+    };
+
+    useEffect(() => {
+        const fetchSettings = async () => {
+            if (!client) {
+                // 如果沒有提供 client (例如在 Admin Dashboard 全覽時)，顯示所有項目
+                setFilteredRegulations(regulationsData);
+                return;
+            }
+
+            try {
+                setLoading(true);
+                // 1. 計算自動啟用的類別
+                const clientType = client.type || [];
+                const clientLicenseTypes = (Array.isArray(clientType) ? clientType : []).map(t => t.toLowerCase());
+                const autoEnabledCategories = clientLicenseTypes.flatMap(
+                    type => LICENSE_TO_CATEGORY[type] || []
+                );
+
+                // 2. 獲取手動覆寫設定
+                const { data: overrides, error } = await supabase
+                    .from('client_calendar_overrides')
+                    .select('regulation_id, action')
+                    .eq('client_id', client.id);
+
+                if (error) throw error;
+
+                // 3. 篩選申報項目
+                const filtered = regulationsData.filter(reg => {
+                    const isAuto = autoEnabledCategories.includes(reg.category);
+                    const override = overrides?.find(o => o.regulation_id === reg.id);
+
+                    if (override) {
+                        return override.action === 'add';
+                    }
+                    return isAuto;
+                });
+
+                setFilteredRegulations(filtered);
+            } catch (error) {
+                console.error('Error fetching calendar settings:', error);
+                // 發生錯誤時退回到只顯示自動啟用的項目
+                const clientType = client.type || [];
+                const clientLicenseTypes = (Array.isArray(clientType) ? clientType : []).map(t => t.toLowerCase());
+                const autoEnabledCategories = clientLicenseTypes.flatMap(
+                    type => LICENSE_TO_CATEGORY[type] || []
+                );
+                const fallback = regulationsData.filter(reg => autoEnabledCategories.includes(reg.category));
+                setFilteredRegulations(fallback);
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        fetchSettings();
+    }, [client]);
 
     const getMonthDeadlines = (month) => {
-        return regulationsData.filter(r => r.months.includes(month));
+        return filteredRegulations.filter(r => r.months.includes(month));
     };
 
     const deadlines = getMonthDeadlines(selectedMonth);
+
+    if (loading) {
+        return (
+            <div className="p-8 text-center bg-white rounded-xl shadow-sm border border-gray-200">
+                <div className="w-8 h-8 border-4 border-teal-200 border-t-teal-600 rounded-full animate-spin mx-auto mb-4"></div>
+                <p className="text-gray-500">正在載入專屬申報行事曆...</p>
+            </div>
+        );
+    }
 
     return (
         <div className="space-y-6 animate-fade-in">

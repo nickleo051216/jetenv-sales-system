@@ -313,20 +313,16 @@ const ClientPortal = () => {
                 return;
             }
 
-            // 同步查詢經濟部資料 (不阻擋主要流程)
-            fetch(`/api/moea?taxId=${searchTaxId}`)
-                .then(res => res.json())
-                .then(data => {
-                    if (data.found) {
-                        setOfficialData(data.data);
-                    }
-                })
-                .catch(err => console.error('Failed to fetch official data:', err));
+            // 暫時移除 MOEA API 呼叫，避免在純前端環境報錯
+            // fetch(`/api/moea?taxId=${searchTaxId}`) ...
 
             // 轉換資料格式為前端需要的格式
             const nearestExpiry = findNearestExpiry(client.licenses);
 
             const formattedResult = {
+                id: client.id, // ID 用於查詢 overrides
+                // 優先使用 clients.type，若無則從 licenses 推導
+                type: client.type || (client.licenses || []).map(l => l.type),
                 taxId: client.tax_id,
                 name: client.name,
                 officer: client.officer ? {
@@ -779,7 +775,7 @@ const ClientPortal = () => {
                     </div>
                 )}
 
-                {activeTab === 'compliance' && <ComplianceView />}
+                {activeTab === 'compliance' && <ComplianceView client={searchResult} />}
                 {activeTab === 'library' && <RegulationLibraryView />}
 
                 {/* Footer */}

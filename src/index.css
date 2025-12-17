@@ -2,6 +2,11 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Custom Animations removed for debugging */
+body {
+  background-color: #f9fafb;
+}
+
 /* 這裡可以加全域樣式 */
 body {
   background-color: #f9fafb;
