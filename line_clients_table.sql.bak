@@ -1,0 +1,126 @@
+-- ================================================
+-- line_clients 表 - LINE 客戶綁定資料
+-- 用途：儲存簽約客戶的 LINE User ID，用於推播通知
+-- ================================================
+
+-- 1. 建立資料表
+CREATE TABLE IF NOT EXISTS line_clients (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  
+  -- LINE 資訊
+  line_user_id TEXT UNIQUE NOT NULL,    -- LINE User ID (U開頭，33字元)
+  line_display_name TEXT,                -- LINE 顯示名稱
+  
+  -- 客戶資訊（關聯用）
+  uniformno TEXT NOT NULL,               -- 統一編號（用來 JOIN 許可證資料）
+  fac_name TEXT,                         -- 工廠名稱
+  quote_number TEXT,                     -- 報價單單號（驗證用）
+  
+  -- 通知設定
+  notify_180days BOOLEAN DEFAULT TRUE,   -- 180天前通知
+  notify_90days BOOLEAN DEFAULT TRUE,    -- 90天前通知
+  notify_30days BOOLEAN DEFAULT TRUE,    -- 30天前通知  
+  notify_7days BOOLEAN DEFAULT TRUE,     -- 7天前通知
+  is_active BOOLEAN DEFAULT TRUE,        -- 是否啟用通知
+  
+  -- 時間戳
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 2. 建立索引（加快查詢速度）
+CREATE INDEX IF NOT EXISTS idx_line_clients_uniformno ON line_clients(uniformno);
+CREATE INDEX IF NOT EXISTS idx_line_clients_line_user_id ON line_clients(line_user_id);
+CREATE INDEX IF NOT EXISTS idx_line_clients_is_active ON line_clients(is_active);
+
+-- 3. 啟用 RLS (Row Level Security)
+ALTER TABLE line_clients ENABLE ROW LEVEL SECURITY;
+
+-- 4. 建立 RLS 政策 - 允許所有人讀取
+CREATE POLICY "Allow public select on line_clients" 
+ON line_clients 
+FOR SELECT 
+USING (true);
+
+-- 5. 建立 RLS 政策 - 允許 Service Role 完全存取（n8n 同步用）
+CREATE POLICY "Allow all for service role on line_clients" 
+ON line_clients 
+FOR ALL 
+USING (true)
+WITH CHECK (true);
+
+-- ================================================
+-- 測試資料（用你自己的 LINE User ID 測試）
+-- ================================================
+-- INSERT INTO line_clients (line_user_id, line_display_name, uniformno, fac_name, quote_number)
+-- VALUES ('U你的LINE_USER_ID', 'Nick', '12345678', '測試工廠', 'Q2024120001');
+
+-- ================================================
+-- 查詢即將到期許可證 + 只推給綁定客戶的完整 SQL
+-- ================================================
+/*
+WITH expiring_permits AS (
+  -- 💧 水污許可證
+  SELECT 
+    wp.ban as uniformno,
+    wp.fac_name,
+    wp.per_no,
+    wp.per_edate as expiry_date,
+    'water' as permit_type,
+    '💧 水污許可' as permit_name
+  FROM water_permits wp
+  WHERE wp.per_edate BETWEEN CURRENT_DATE AND (CURRENT_DATE + INTERVAL '180 days')
+  
+  UNION ALL
+  
+  -- ☢️ 毒化物許可證
+  SELECT 
+    COALESCE(tp.unino, tp.ban) as uniformno,
+    tp.fac_name,
+    tp.per_no,
+    tp.edate as expiry_date,
+    'toxic' as permit_type,
+    '☢️ 毒化物許可' as permit_name
+  FROM toxic_permits tp
+  WHERE tp.edate BETWEEN CURRENT_DATE AND (CURRENT_DATE + INTERVAL '180 days')
+  
+  UNION ALL
+  
+  -- 💨 空污許可證
+  SELECT 
+    f.uniformno,
+    f.facilityname as fac_name,
+    NULL as per_no,
+    f.airreleasedate as expiry_date,
+    'air' as permit_type,
+    '💨 空污許可' as permit_name
+  FROM factories f
+  WHERE f.airreleasedate BETWEEN CURRENT_DATE AND (CURRENT_DATE + INTERVAL '180 days')
+  
+  UNION ALL
+  
+  -- 🗑️ 廢清書
+  SELECT 
+    f.uniformno,
+    f.facilityname as fac_name,
+    NULL as per_no,
+    f.wastereleasedate as expiry_date,
+    'waste' as permit_type,
+    '🗑️ 廢清書' as permit_name
+  FROM factories f
+  WHERE f.wastereleasedate BETWEEN CURRENT_DATE AND (CURRENT_DATE + INTERVAL '180 days')
+)
+SELECT 
+  lc.line_user_id,           -- 推播對象
+  lc.line_display_name,
+  ep.uniformno,
+  ep.fac_name,
+  ep.permit_type,
+  ep.permit_name,
+  ep.expiry_date,
+  (ep.expiry_date - CURRENT_DATE) as days_until_expiry
+FROM expiring_permits ep
+INNER JOIN line_clients lc ON ep.uniformno = lc.uniformno
+WHERE lc.is_active = TRUE
+ORDER BY ep.expiry_date ASC;
+*/
