@@ -292,7 +292,7 @@ const ClientPortal = () => {
                 .from('clients')
                 .select(`
                     *,
-                    officer:officers(name, phone, title, avatar_color),
+                    officer:officers(name, phone, title, avatar_color, email),
                     licenses(*)
                 `)
                 .eq('tax_id', searchTaxId)
@@ -329,11 +329,13 @@ const ClientPortal = () => {
                     name: client.officer.name,
                     title: client.officer.title || '專案經理',
                     phone: client.officer.phone,
+                    email: client.officer.email,
                     avatarColor: client.officer.avatar_color || 'bg-blue-600'
                 } : {
                     name: '傑太團隊',
                     title: '專案經理',
                     phone: '(02)6609-5888',
+                    email: 'jetenv92662049@gmail.com',
                     avatarColor: 'bg-blue-600'
                 },
                 projectInfo: {
@@ -509,6 +511,12 @@ const ClientPortal = () => {
                                             <Globe size={20} />
                                             <span>公司官網</span>
                                         </a>
+                                        {searchResult.officer.email && (
+                                            <a href={`mailto:${searchResult.officer.email}`} className="flex items-center justify-center gap-2 bg-orange-500 hover:bg-orange-600 text-white px-6 py-3 rounded-xl shadow-lg transition font-bold">
+                                                <Mail size={20} />
+                                                <span>Email</span>
+                                            </a>
+                                        )}
                                     </div>
                                 </div>
                             )}

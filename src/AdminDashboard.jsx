@@ -110,8 +110,11 @@ const ClientView = () => {
     waterExpiry: '',
     toxicExpiry: '',
     wasteExpiry: '',
-    officerId: '' // 承辦人 ID
+    officerId: '' // 承辦人 ID，空值表示用預設（傑太團隊）
   });
+
+  // 預設承辦人 ID (傑太團隊)
+  const DEFAULT_OFFICER_ID = 'adc3eeb9-77ab-47d8-8859-adca5e1a8ae4';
 
   // 從 Supabase 讀取客戶資料
   useEffect(() => {
@@ -445,7 +448,7 @@ const ClientView = () => {
           phase: phaseMap[newClientForm.status] || 1,
           next_action: newClientForm.nextAction,
           deadline: newClientForm.deadline || null,
-          officer_id: newClientForm.officerId || null
+          officer_id: newClientForm.officerId || DEFAULT_OFFICER_ID
         })
         .select()
         .single();
