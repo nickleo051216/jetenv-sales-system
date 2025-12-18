@@ -1047,11 +1047,10 @@ const ClientView = () => {
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">傑太承辦人</label>
-                <select className="w-full border rounded-lg p-2" value={newClientForm.officerId} onChange={e => setNewClientForm({ ...newClientForm, officerId: e.target.value })}>
-                  <option value="">傑太團隊 (預設)</option>
+                <select className="w-full border rounded-lg p-2" value={newClientForm.officerId || DEFAULT_OFFICER_ID} onChange={e => setNewClientForm({ ...newClientForm, officerId: e.target.value })}>
                   {officers.map(officer => (
                     <option key={officer.id} value={officer.id}>
-                      {officer.name} - {officer.title || '專案經理'}
+                      {officer.name} - {officer.title || '專案經理'}{officer.id === DEFAULT_OFFICER_ID ? ' (預設)' : ''}
                     </option>
                   ))}
                 </select>
@@ -1297,10 +1296,9 @@ const ClientView = () => {
                         });
                       }}
                     >
-                      <option value="">傑太團隊 (預設)</option>
                       {officers.map(officer => (
                         <option key={officer.id} value={officer.id}>
-                          {officer.name} - {officer.title || '專案經理'}
+                          {officer.name} - {officer.title || '專案經理'}{officer.id === DEFAULT_OFFICER_ID ? ' (預設)' : ''}
                         </option>
                       ))}
                     </select>
