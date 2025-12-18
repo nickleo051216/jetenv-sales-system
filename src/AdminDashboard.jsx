@@ -94,6 +94,7 @@ const ClientView = () => {
   const [moeaData, setMoeaData] = useState(null); // 經濟部資料
   const [factoryData, setFactoryData] = useState(null); // 工廠資料（從 factories 表）
   const [permitsData, setPermitsData] = useState(null); // 許可證資料（從環境部 API）
+  const [officers, setOfficers] = useState([]); // 承辦人列表
   const [newClientForm, setNewClientForm] = useState({
     name: '',
     taxId: '',
@@ -106,13 +107,29 @@ const ClientView = () => {
     airExpiry: '',
     waterExpiry: '',
     toxicExpiry: '',
-    wasteExpiry: ''
+    wasteExpiry: '',
+    officerId: '' // 承辦人 ID
   });
 
   // 從 Supabase 讀取客戶資料
   useEffect(() => {
     fetchClients();
+    fetchOfficers();
   }, []);
+
+  // 載入承辦人列表
+  const fetchOfficers = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('officers')
+        .select('*')
+        .order('name');
+      if (error) throw error;
+      setOfficers(data || []);
+    } catch (error) {
+      console.error('載入承辦人列表失敗:', error);
+    }
+  };
 
   const fetchClients = async () => {
     try {
@@ -424,7 +441,8 @@ const ClientView = () => {
           status: newClientForm.status,
           phase: phaseMap[newClientForm.status] || 1,
           next_action: newClientForm.nextAction,
-          deadline: newClientForm.deadline || null
+          deadline: newClientForm.deadline || null,
+          officer_id: newClientForm.officerId || null
         })
         .select()
         .single();
@@ -480,7 +498,8 @@ const ClientView = () => {
         airExpiry: '',
         waterExpiry: '',
         toxicExpiry: '',
-        wasteExpiry: ''
+        wasteExpiry: '',
+        officerId: ''
       });
       setMoeaData(null); // 清除暫存的經濟部資料
       setFactoryData(null); // 清除暫存的工廠資料
@@ -992,6 +1011,17 @@ const ClientView = () => {
                   <option value="操作許可申請中">5️⃣ 操作許可申請中</option>
                   <option value="營運中">6️⃣ 營運中</option>
                   <option value="申請展延中">7️⃣ 申請展延中</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">傑太承辦人</label>
+                <select className="w-full border rounded-lg p-2" value={newClientForm.officerId} onChange={e => setNewClientForm({ ...newClientForm, officerId: e.target.value })}>
+                  <option value="">傑太團隊 (預設)</option>
+                  {officers.map(officer => (
+                    <option key={officer.id} value={officer.id}>
+                      {officer.name} - {officer.title || '專案經理'}
+                    </option>
+                  ))}
                 </select>
               </div>
               <div>
