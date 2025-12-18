@@ -31,7 +31,8 @@ import {
   Plus,
   Zap,
   Trash2,
-  Edit2
+  Edit2,
+  User
 } from 'lucide-react';
 
 // --- Client List Data ---
@@ -84,6 +85,7 @@ const Navigation = ({ activeTab, setActiveTab, isMobile, setMenuOpen }) => {
 const ClientView = () => {
   const [clients, setClients] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
+  const [filterOfficerId, setFilterOfficerId] = useState(''); // 篩選承辦人
   const [loading, setLoading] = useState(true);
 
   // Modal states
@@ -538,7 +540,8 @@ const ClientView = () => {
           next_action: editingClient.nextAction || null,
           remarks: editingClient.remarks || null,
           // 確保 deadline 是有效日期格式或 null
-          deadline: /^\d{4}-\d{2}-\d{2}$/.test(editingClient.deadline) ? editingClient.deadline : null
+          deadline: /^\d{4}-\d{2}-\d{2}$/.test(editingClient.deadline) ? editingClient.deadline : null,
+          officer_id: editingClient.officerId || editingClient.officer?.id || null
         })
         .eq('id', editingClient.id);
 
@@ -731,9 +734,11 @@ const ClientView = () => {
     }
   };
 
-  const filteredClients = clients.filter(c =>
-    c.name.includes(searchTerm) || c.status.includes(searchTerm)
-  );
+  const filteredClients = clients.filter(c => {
+    const matchesSearch = c.name.includes(searchTerm) || c.status.includes(searchTerm);
+    const matchesOfficer = !filterOfficerId || c.officer?.id === filterOfficerId;
+    return matchesSearch && matchesOfficer;
+  });
 
   if (loading) {
     return (
@@ -763,6 +768,18 @@ const ClientView = () => {
             onChange={(e) => setSearchTerm(e.target.value)}
           />
         </div>
+        <select
+          className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
+          value={filterOfficerId}
+          onChange={(e) => setFilterOfficerId(e.target.value)}
+        >
+          <option value="">全部承辦人</option>
+          {officers.map(officer => (
+            <option key={officer.id} value={officer.id}>
+              {officer.name}
+            </option>
+          ))}
+        </select>
       </div>
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">{filteredClients.map(client => (
@@ -841,6 +858,17 @@ const ClientView = () => {
                   期限:
                 </span>
                 <span className="font-bold text-red-600">{client.deadline}</span>
+              </div>
+
+              {/* 承辦人 */}
+              <div className="flex justify-between text-gray-600">
+                <span className="flex items-center gap-1">
+                  <User className="w-3 h-3" />
+                  承辦人:
+                </span>
+                <span className="font-medium text-blue-600">
+                  {client.officer?.name || '傑太團隊'}
+                </span>
               </div>
             </div>
 
@@ -1249,6 +1277,29 @@ const ClientView = () => {
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">統一編號</label>
                     <input required type="text" className="w-full border rounded-lg p-2 font-mono" value={editingClient.taxId} onChange={e => setEditingClient({ ...editingClient, taxId: e.target.value })} maxLength={8} />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">傑太承辦人</label>
+                    <select
+                      className="w-full border rounded-lg p-2"
+                      value={editingClient.officer?.id || ''}
+                      onChange={e => {
+                        const selectedOfficer = officers.find(o => o.id === e.target.value);
+                        setEditingClient({
+                          ...editingClient,
+                          officer: selectedOfficer || null,
+                          officerId: e.target.value || null
+                        });
+                      }}
+                    >
+                      <option value="">傑太團隊 (預設)</option>
+                      {officers.map(officer => (
+                        <option key={officer.id} value={officer.id}>
+                          {officer.name} - {officer.title || '專案經理'}
+                        </option>
+                      ))}
+                    </select>
                   </div>
 
                   <div>
