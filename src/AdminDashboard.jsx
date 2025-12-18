@@ -140,7 +140,7 @@ const ClientView = () => {
         .from('clients')
         .select(`
           *,
-          officer:officers(name, phone, title, avatar_color),
+          officer:officers(id, name, phone, title, avatar_color),
           licenses(*)
         `)
         .order('created_at', { ascending: false });
@@ -160,7 +160,8 @@ const ClientView = () => {
         deadline: client.deadline || '未設定',
         type: client.licenses?.map(l => l.type.charAt(0).toUpperCase() + l.type.slice(1)) || ['Air'],
         licenses: client.licenses || [],
-        officer: client.officer
+        officer: client.officer,
+        officerId: client.officer_id  // 保留 officer_id 供編輯用
       }));
 
       setClients(formattedClients);
