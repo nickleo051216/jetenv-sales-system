@@ -175,6 +175,7 @@ const ClientPortal = () => {
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState(null);
     const [officialData, setOfficialData] = useState(null);
+    const [historyExpanded, setHistoryExpanded] = useState(false); // 控制歷史記錄折疊
 
     useEffect(() => {
         const checkMobile = () => setIsMobile(window.innerWidth < 768);
@@ -626,44 +627,60 @@ const ClientPortal = () => {
                             </div>
                         </div>
 
-                        {/* 專案動態 (取代原本空的 Recent Tasks) */}
+
+                        {/* 專案動態 - 可折疊時間軸 */}
                         <div className="bg-white rounded-2xl shadow-lg p-6">
                             <h3 className="text-xl font-bold text-gray-800 mb-6 flex items-center gap-2">
                                 <FileText className="text-blue-500" />
                                 專案最新動態
                             </h3>
 
-                            <div className="space-y-6">
-                                {/* 目前進度 */}
+                            {/* 狀態顏色說明 */}
+                            <div className="flex flex-wrap gap-3 mb-6 text-xs">
+                                <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-full bg-blue-500"></span> 進行中</span>
+                                <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-full bg-green-500"></span> 已完成</span>
+                                <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-full bg-yellow-500"></span> 待處理</span>
+                                <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-full bg-red-500"></span> 延遲</span>
+                            </div>
+
+                            <div className="space-y-4">
+                                {/* 目前進度 - 藍色（進行中） */}
                                 <div className="flex gap-4">
                                     <div className="flex flex-col items-center">
-                                        <div className="bg-blue-600 p-2 rounded-full shadow-lg z-10">
+                                        <div className="bg-blue-500 p-2 rounded-full shadow-lg z-10 ring-4 ring-blue-100">
                                             <Activity className="text-white" size={20} />
                                         </div>
-                                        <div className="w-0.5 h-full bg-blue-100 -mt-1"></div>
+                                        <div className="w-0.5 h-full bg-gradient-to-b from-blue-300 to-teal-300 -mt-1"></div>
                                     </div>
-                                    <div className="pb-6">
-                                        <p className="text-sm font-bold text-blue-600 mb-1">目前進度</p>
+                                    <div className="pb-4 flex-1">
+                                        <div className="flex items-center gap-2 mb-1">
+                                            <p className="text-sm font-bold text-blue-600">目前進度</p>
+                                            <span className="px-2 py-0.5 bg-blue-100 text-blue-700 text-xs rounded-full font-bold">進行中</span>
+                                        </div>
                                         <p className="text-xl font-black text-gray-800 leading-tight">
                                             {searchResult.currentProgress}
                                         </p>
                                         {searchResult.remarks && (
-                                            <span className="inline-block mt-2 px-2 py-0.5 bg-gray-100 text-gray-600 text-xs rounded font-bold">
-                                                註記：{searchResult.remarks}
+                                            <span className="inline-block mt-2 px-2 py-0.5 bg-amber-50 text-amber-700 text-xs rounded font-bold border border-amber-200">
+                                                📝 {searchResult.remarks}
                                             </span>
                                         )}
                                     </div>
                                 </div>
 
-                                {/* 下一步動作 */}
+                                {/* 下一步動作 - 黃色（待處理） */}
                                 <div className="flex gap-4">
                                     <div className="flex flex-col items-center">
-                                        <div className="bg-teal-500 p-2 rounded-full shadow-lg z-10">
+                                        <div className="bg-yellow-500 p-2 rounded-full shadow-lg z-10 ring-4 ring-yellow-100">
                                             <ArrowRight className="text-white" size={20} />
                                         </div>
+                                        <div className="w-0.5 h-full bg-gradient-to-b from-yellow-300 to-gray-200 -mt-1"></div>
                                     </div>
-                                    <div>
-                                        <p className="text-sm font-bold text-teal-600 mb-1">下一步動作</p>
+                                    <div className="pb-4 flex-1">
+                                        <div className="flex items-center gap-2 mb-1">
+                                            <p className="text-sm font-bold text-yellow-600">下一步動作</p>
+                                            <span className="px-2 py-0.5 bg-yellow-100 text-yellow-700 text-xs rounded-full font-bold">待處理</span>
+                                        </div>
                                         <p className="text-lg font-bold text-gray-700">
                                             {searchResult.nextAction}
                                         </p>
@@ -672,32 +689,50 @@ const ClientPortal = () => {
                                 </div>
                             </div>
 
-                            {/* 如果未來有具體任務列表，可以在此下方繼續顯示 */}
-                            {searchResult.tasks.length > 0 && (
-                                <div className="mt-8 pt-6 border-t border-gray-100 divide-y divide-gray-100">
-                                    <p className="text-xs font-bold text-gray-400 mb-4 tracking-widest uppercase">歷史辦理記錄</p>
-                                    {searchResult.tasks.map((task) => (
-                                        <div key={task.id} className="py-4 flex items-center justify-between hover:bg-gray-50 rounded-lg px-2 transition">
-                                            <div className="flex items-center gap-4">
-                                                {task.status === 'done' ? (
-                                                    <div className="bg-green-100 p-2 rounded-full">
-                                                        <CheckCircle className="text-green-600" size={24} />
+                            {/* 歷史記錄 - 可折疊 */}
+                            {searchResult.tasks && searchResult.tasks.length > 0 && (
+                                <div className="mt-6 pt-4 border-t border-gray-100">
+                                    <button
+                                        onClick={() => setHistoryExpanded(!historyExpanded)}
+                                        className="w-full flex items-center justify-between text-sm font-bold text-gray-500 hover:text-gray-700 transition py-2"
+                                    >
+                                        <span className="flex items-center gap-2">
+                                            <CheckCircle size={16} />
+                                            歷史辦理記錄 ({searchResult.tasks.length} 筆)
+                                        </span>
+                                        {historyExpanded ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
+                                    </button>
+
+                                    {historyExpanded && (
+                                        <div className="mt-4 space-y-3 animate-fade-in">
+                                            {searchResult.tasks.map((task) => (
+                                                <div key={task.id} className="flex gap-4 opacity-80 hover:opacity-100 transition">
+                                                    <div className="flex flex-col items-center">
+                                                        <div className={`p-1.5 rounded-full ${task.status === 'done' ? 'bg-green-500' : task.status === 'delayed' ? 'bg-red-500' : 'bg-gray-300'}`}>
+                                                            {task.status === 'done' ? (
+                                                                <CheckCircle className="text-white" size={14} />
+                                                            ) : (
+                                                                <Activity className="text-white" size={14} />
+                                                            )}
+                                                        </div>
+                                                        <div className="w-0.5 h-full bg-gray-200 -mt-1"></div>
                                                     </div>
-                                                ) : (
-                                                    <div className="bg-blue-50 p-2 rounded-full">
-                                                        <div className="w-6 h-6 rounded-full border-4 border-blue-200 border-t-blue-600 animate-spin"></div>
+                                                    <div className="pb-3 flex-1">
+                                                        <div className="flex items-center justify-between">
+                                                            <p className="text-sm font-medium text-gray-700">{task.name}</p>
+                                                            <span className={`px-2 py-0.5 text-xs rounded-full font-bold ${task.status === 'done' ? 'bg-green-100 text-green-700' :
+                                                                    task.status === 'delayed' ? 'bg-red-100 text-red-700' :
+                                                                        'bg-gray-100 text-gray-600'
+                                                                }`}>
+                                                                {task.status === 'done' ? '已完成' : task.status === 'delayed' ? '延遲' : '處理中'}
+                                                            </span>
+                                                        </div>
+                                                        <p className="text-xs text-gray-400">{task.date}</p>
                                                     </div>
-                                                )}
-                                                <div>
-                                                    <p className="text-lg font-bold text-gray-800">{task.name}</p>
-                                                    <p className="text-sm text-gray-500 font-medium">{task.date}</p>
                                                 </div>
-                                            </div>
-                                            <span className={`px-4 py-2 rounded-full text-sm font-bold ${task.status === 'done' ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'}`}>
-                                                {task.status === 'done' ? '已完成' : '進行中'}
-                                            </span>
+                                            ))}
                                         </div>
-                                    ))}
+                                    )}
                                 </div>
                             )}
                         </div>
