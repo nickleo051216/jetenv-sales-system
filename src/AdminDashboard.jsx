@@ -114,7 +114,7 @@ const ClientView = () => {
   });
 
   // 預設承辦人 ID (傑太團隊)
-  const DEFAULT_OFFICER_ID = 'adc3eeb9-77ab-47d8-8859-adca5e1a8ae4';
+  const DEFAULT_OFFICER_ID = 'adc3eeb9-77ab-47d8-8859-adca5e1a8ae0';
 
   // 從 Supabase 讀取客戶資料
   useEffect(() => {
