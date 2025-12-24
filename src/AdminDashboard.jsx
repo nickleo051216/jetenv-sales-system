@@ -31,8 +31,7 @@ import {
   Plus,
   Zap,
   Trash2,
-  Edit2,
-  User
+  Edit2
 } from 'lucide-react';
 
 // --- Client List Data ---
@@ -85,7 +84,6 @@ const Navigation = ({ activeTab, setActiveTab, isMobile, setMenuOpen }) => {
 const ClientView = () => {
   const [clients, setClients] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
-  const [filterOfficerId, setFilterOfficerId] = useState(''); // 篩選承辦人
   const [loading, setLoading] = useState(true);
 
   // Modal states
@@ -96,7 +94,6 @@ const ClientView = () => {
   const [moeaData, setMoeaData] = useState(null); // 經濟部資料
   const [factoryData, setFactoryData] = useState(null); // 工廠資料（從 factories 表）
   const [permitsData, setPermitsData] = useState(null); // 許可證資料（從環境部 API）
-  const [officers, setOfficers] = useState([]); // 承辦人列表
   const [newClientForm, setNewClientForm] = useState({
     name: '',
     taxId: '',
@@ -105,36 +102,19 @@ const ClientView = () => {
     deadline: '',
     licenseTypes: [], // 空氣, 廢水, 廢棄物, 毒化, 土壤
     industry: '', // 行業別
+    currentProgress: '', // 目前進度
+    remarks: '', // 備註
     // 許可證到期日
     airExpiry: '',
     waterExpiry: '',
     toxicExpiry: '',
-    wasteExpiry: '',
-    officerId: '' // 承辦人 ID，空值表示用預設（傑太團隊）
+    wasteExpiry: ''
   });
-
-  // 預設承辦人 ID (傑太團隊)
-  const DEFAULT_OFFICER_ID = 'adc3eeb9-77ab-47d8-8859-adca5e1a8ae0';
 
   // 從 Supabase 讀取客戶資料
   useEffect(() => {
     fetchClients();
-    fetchOfficers();
   }, []);
-
-  // 載入承辦人列表
-  const fetchOfficers = async () => {
-    try {
-      const { data, error } = await supabase
-        .from('officers')
-        .select('*')
-        .order('name');
-      if (error) throw error;
-      setOfficers(data || []);
-    } catch (error) {
-      console.error('載入承辦人列表失敗:', error);
-    }
-  };
 
   const fetchClients = async () => {
     try {
@@ -143,7 +123,7 @@ const ClientView = () => {
         .from('clients')
         .select(`
           *,
-          officer:officers(id, name, phone, title, avatar_color),
+          officer:officers(name, phone, title, avatar_color),
           licenses(*)
         `)
         .order('created_at', { ascending: false });
@@ -163,8 +143,7 @@ const ClientView = () => {
         deadline: client.deadline || '未設定',
         type: client.licenses?.map(l => l.type.charAt(0).toUpperCase() + l.type.slice(1)) || ['Air'],
         licenses: client.licenses || [],
-        officer: client.officer,
-        officerId: client.officer_id  // 保留 officer_id 供編輯用
+        officer: client.officer
       }));
 
       setClients(formattedClients);
@@ -446,9 +425,10 @@ const ClientView = () => {
           name: newClientForm.name,
           status: newClientForm.status,
           phase: phaseMap[newClientForm.status] || 1,
+          current_progress: newClientForm.currentProgress,
+          remarks: newClientForm.remarks,
           next_action: newClientForm.nextAction,
-          deadline: newClientForm.deadline || null,
-          officer_id: newClientForm.officerId || DEFAULT_OFFICER_ID
+          deadline: newClientForm.deadline || null
         })
         .select()
         .single();
@@ -501,11 +481,12 @@ const ClientView = () => {
         deadline: '',
         licenseTypes: [],
         industry: '',
+        currentProgress: '',
+        remarks: '',
         airExpiry: '',
         waterExpiry: '',
         toxicExpiry: '',
-        wasteExpiry: '',
-        officerId: ''
+        wasteExpiry: ''
       });
       setMoeaData(null); // 清除暫存的經濟部資料
       setFactoryData(null); // 清除暫存的工廠資料
@@ -544,8 +525,7 @@ const ClientView = () => {
           next_action: editingClient.nextAction || null,
           remarks: editingClient.remarks || null,
           // 確保 deadline 是有效日期格式或 null
-          deadline: /^\d{4}-\d{2}-\d{2}$/.test(editingClient.deadline) ? editingClient.deadline : null,
-          officer_id: editingClient.officerId || editingClient.officer?.id || null
+          deadline: /^\d{4}-\d{2}-\d{2}$/.test(editingClient.deadline) ? editingClient.deadline : null
         })
         .eq('id', editingClient.id);
 
@@ -738,11 +718,9 @@ const ClientView = () => {
     }
   };
 
-  const filteredClients = clients.filter(c => {
-    const matchesSearch = c.name.includes(searchTerm) || c.status.includes(searchTerm);
-    const matchesOfficer = !filterOfficerId || c.officer?.id === filterOfficerId;
-    return matchesSearch && matchesOfficer;
-  });
+  const filteredClients = clients.filter(c =>
+    c.name.includes(searchTerm) || c.status.includes(searchTerm)
+  );
 
   if (loading) {
     return (
@@ -772,18 +750,6 @@ const ClientView = () => {
             onChange={(e) => setSearchTerm(e.target.value)}
           />
         </div>
-        <select
-          className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
-          value={filterOfficerId}
-          onChange={(e) => setFilterOfficerId(e.target.value)}
-        >
-          <option value="">全部承辦人</option>
-          {officers.map(officer => (
-            <option key={officer.id} value={officer.id}>
-              {officer.name}
-            </option>
-          ))}
-        </select>
       </div>
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">{filteredClients.map(client => (
@@ -862,17 +828,6 @@ const ClientView = () => {
                   期限:
                 </span>
                 <span className="font-bold text-red-600">{client.deadline}</span>
-              </div>
-
-              {/* 承辦人 */}
-              <div className="flex justify-between text-gray-600">
-                <span className="flex items-center gap-1">
-                  <User className="w-3 h-3" />
-                  承辦人:
-                </span>
-                <span className="font-medium text-blue-600">
-                  {client.officer?.name || '傑太團隊'}
-                </span>
               </div>
             </div>
 
@@ -1046,15 +1001,39 @@ const ClientView = () => {
                 </select>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">傑太承辦人</label>
-                <select className="w-full border rounded-lg p-2" value={newClientForm.officerId || DEFAULT_OFFICER_ID} onChange={e => setNewClientForm({ ...newClientForm, officerId: e.target.value })}>
-                  {officers.map(officer => (
-                    <option key={officer.id} value={officer.id}>
-                      {officer.name} - {officer.title || '專案經理'}{officer.id === DEFAULT_OFFICER_ID ? ' (預設)' : ''}
-                    </option>
-                  ))}
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <Activity className="w-3 h-3 inline mr-1" />
+                  目前進度
+                </label>
+                <input
+                  type="text"
+                  className="w-full border rounded-lg p-2"
+                  value={newClientForm.currentProgress}
+                  onChange={e => setNewClientForm({ ...newClientForm, currentProgress: e.target.value })}
+                  placeholder="例如：聯繫中、已送件"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <FileText className="w-3 h-3 inline mr-1" />
+                  備註
+                </label>
+                <select
+                  className="w-full border rounded-lg p-2"
+                  value={newClientForm.remarks}
+                  onChange={e => setNewClientForm({ ...newClientForm, remarks: e.target.value })}
+                >
+                  <option value="">無</option>
+                  <option value="可拜訪">可拜訪</option>
+                  <option value="查無資料">查無資料</option>
+                  <option value="剛換發">剛換發</option>
+                  <option value="自行申報">自行申報</option>
+                  <option value="待觀察">待觀察</option>
+                  <option value="自己人">自己人</option>
                 </select>
               </div>
+
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">委託項目 (可多選)</label>
                 <div className="flex flex-wrap gap-2">
@@ -1280,28 +1259,6 @@ const ClientView = () => {
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">統一編號</label>
                     <input required type="text" className="w-full border rounded-lg p-2 font-mono" value={editingClient.taxId} onChange={e => setEditingClient({ ...editingClient, taxId: e.target.value })} maxLength={8} />
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">傑太承辦人</label>
-                    <select
-                      className="w-full border rounded-lg p-2"
-                      value={editingClient.officer?.id || ''}
-                      onChange={e => {
-                        const selectedOfficer = officers.find(o => o.id === e.target.value);
-                        setEditingClient({
-                          ...editingClient,
-                          officer: selectedOfficer || null,
-                          officerId: e.target.value || null
-                        });
-                      }}
-                    >
-                      {officers.map(officer => (
-                        <option key={officer.id} value={officer.id}>
-                          {officer.name} - {officer.title || '專案經理'}{officer.id === DEFAULT_OFFICER_ID ? ' (預設)' : ''}
-                        </option>
-                      ))}
-                    </select>
                   </div>
 
                   <div>

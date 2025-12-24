@@ -345,6 +345,9 @@ const ClientPortal = () => {
                     status: determineProjectStatus(client.status),
                     statusText: client.status // 新增: 原始狀態文字
                 },
+                currentProgress: client.current_progress || '暫無資訊',
+                nextAction: client.next_action || '待確認',
+                remarks: client.remarks || '',
                 licenses: formatLicenses(client.licenses),
                 tasks: [] // 如果有 tasks 表可以在這裡查詢
             };
@@ -623,36 +626,80 @@ const ClientPortal = () => {
                             </div>
                         </div>
 
-                        {/* Recent Tasks */}
+                        {/* 專案動態 (取代原本空的 Recent Tasks) */}
                         <div className="bg-white rounded-2xl shadow-lg p-6">
-                            <h3 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
-                                <FileText className="text-gray-500" />
-                                近期辦理進度
+                            <h3 className="text-xl font-bold text-gray-800 mb-6 flex items-center gap-2">
+                                <FileText className="text-blue-500" />
+                                專案最新動態
                             </h3>
-                            <div className="divide-y divide-gray-100">
-                                {searchResult.tasks.map((task) => (
-                                    <div key={task.id} className="py-4 flex items-center justify-between hover:bg-gray-50 rounded-lg px-2 transition">
-                                        <div className="flex items-center gap-4">
-                                            {task.status === 'done' ? (
-                                                <div className="bg-green-100 p-2 rounded-full">
-                                                    <CheckCircle className="text-green-600" size={24} />
-                                                </div>
-                                            ) : (
-                                                <div className="bg-blue-50 p-2 rounded-full">
-                                                    <div className="w-6 h-6 rounded-full border-4 border-blue-200 border-t-blue-600 animate-spin"></div>
-                                                </div>
-                                            )}
-                                            <div>
-                                                <p className="text-lg font-bold text-gray-800">{task.name}</p>
-                                                <p className="text-sm text-gray-500 font-medium">{task.date}</p>
-                                            </div>
+
+                            <div className="space-y-6">
+                                {/* 目前進度 */}
+                                <div className="flex gap-4">
+                                    <div className="flex flex-col items-center">
+                                        <div className="bg-blue-600 p-2 rounded-full shadow-lg z-10">
+                                            <Activity className="text-white" size={20} />
                                         </div>
-                                        <span className={`px-4 py-2 rounded-full text-sm font-bold ${task.status === 'done' ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'}`}>
-                                            {task.status === 'done' ? '已完成' : '進行中'}
-                                        </span>
+                                        <div className="w-0.5 h-full bg-blue-100 -mt-1"></div>
                                     </div>
-                                ))}
+                                    <div className="pb-6">
+                                        <p className="text-sm font-bold text-blue-600 mb-1">目前進度</p>
+                                        <p className="text-xl font-black text-gray-800 leading-tight">
+                                            {searchResult.currentProgress}
+                                        </p>
+                                        {searchResult.remarks && (
+                                            <span className="inline-block mt-2 px-2 py-0.5 bg-gray-100 text-gray-600 text-xs rounded font-bold">
+                                                註記：{searchResult.remarks}
+                                            </span>
+                                        )}
+                                    </div>
+                                </div>
+
+                                {/* 下一步動作 */}
+                                <div className="flex gap-4">
+                                    <div className="flex flex-col items-center">
+                                        <div className="bg-teal-500 p-2 rounded-full shadow-lg z-10">
+                                            <ArrowRight className="text-white" size={20} />
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <p className="text-sm font-bold text-teal-600 mb-1">下一步動作</p>
+                                        <p className="text-lg font-bold text-gray-700">
+                                            {searchResult.nextAction}
+                                        </p>
+                                        <p className="text-xs text-gray-400 mt-1 italic">* 傑太團隊正在為您全力推進中</p>
+                                    </div>
+                                </div>
                             </div>
+
+                            {/* 如果未來有具體任務列表，可以在此下方繼續顯示 */}
+                            {searchResult.tasks.length > 0 && (
+                                <div className="mt-8 pt-6 border-t border-gray-100 divide-y divide-gray-100">
+                                    <p className="text-xs font-bold text-gray-400 mb-4 tracking-widest uppercase">歷史辦理記錄</p>
+                                    {searchResult.tasks.map((task) => (
+                                        <div key={task.id} className="py-4 flex items-center justify-between hover:bg-gray-50 rounded-lg px-2 transition">
+                                            <div className="flex items-center gap-4">
+                                                {task.status === 'done' ? (
+                                                    <div className="bg-green-100 p-2 rounded-full">
+                                                        <CheckCircle className="text-green-600" size={24} />
+                                                    </div>
+                                                ) : (
+                                                    <div className="bg-blue-50 p-2 rounded-full">
+                                                        <div className="w-6 h-6 rounded-full border-4 border-blue-200 border-t-blue-600 animate-spin"></div>
+                                                    </div>
+                                                )}
+                                                <div>
+                                                    <p className="text-lg font-bold text-gray-800">{task.name}</p>
+                                                    <p className="text-sm text-gray-500 font-medium">{task.date}</p>
+                                                </div>
+                                            </div>
+                                            <span className={`px-4 py-2 rounded-full text-sm font-bold ${task.status === 'done' ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'}`}>
+                                                {task.status === 'done' ? '已完成' : '進行中'}
+                                            </span>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
                         </div>
                     </div>
                 )}
