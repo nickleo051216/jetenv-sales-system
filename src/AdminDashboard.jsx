@@ -954,7 +954,7 @@ const ClientView = () => {
               )}
 
               {/* 展開/收合按鈕 */}
-              {(client.address || client.phone || client.county) && (
+              {(client.address || client.phone || client.county || (client.licenses && client.licenses.length > 0)) && (
                 <button
                   onClick={() => setExpandedCards(prev => ({ ...prev, [client.id]: !prev[client.id] }))}
                   className="w-full mt-2 py-1.5 text-xs text-gray-500 hover:text-teal-600 hover:bg-teal-50 rounded transition-colors flex items-center justify-center gap-1"
@@ -1002,6 +1002,43 @@ const ClientView = () => {
                       <ExternalLink className="w-4 h-4" />
                       🗺️ 開啟 Google Maps 導航
                     </a>
+                  )}
+                  {/* 許可證期效 */}
+                  {client.licenses && client.licenses.length > 0 && (
+                    <div className="mt-2 pt-2 border-t border-gray-100">
+                      <div className="text-xs font-medium text-gray-500 mb-2">📋 許可證期效</div>
+                      <div className="space-y-1">
+                        {client.licenses.map((license, idx) => {
+                          const typeLabels = {
+                            air: '💨 空氣',
+                            water: '💧 廢水',
+                            waste: '🗑️ 廢棄物',
+                            toxic: '☢️ 毒化',
+                            soil: '🌍 土壤'
+                          };
+                          const isExpired = license.expiry_date && new Date(license.expiry_date) < new Date();
+                          const isNearExpiry = license.expiry_date &&
+                            new Date(license.expiry_date) < new Date(Date.now() + 90 * 24 * 60 * 60 * 1000) &&
+                            !isExpired;
+
+                          return (
+                            <div key={idx} className="flex justify-between items-center text-sm">
+                              <span className="text-gray-600">
+                                {typeLabels[license.type.toLowerCase()] || license.type}
+                              </span>
+                              <span className={`font-medium ${isExpired ? 'text-red-600' :
+                                  isNearExpiry ? 'text-amber-600' :
+                                    'text-gray-700'
+                                }`}>
+                                {license.expiry_date || '未設定'}
+                                {isExpired && ' ⚠️ 已逾期'}
+                                {isNearExpiry && ' ⏰ 將到期'}
+                              </span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
                   )}
                 </div>
               )}
