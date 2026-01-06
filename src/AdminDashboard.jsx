@@ -13,6 +13,7 @@ import {
   Clock,
   ChevronRight,
   ChevronDown,
+  ChevronUp,
   Droplets,
   Wind,
   Sprout,
@@ -31,7 +32,8 @@ import {
   Plus,
   Zap,
   Trash2,
-  Edit2
+  Edit2,
+  MapPin
 } from 'lucide-react';
 
 // --- Client List Data ---
@@ -84,6 +86,8 @@ const Navigation = ({ activeTab, setActiveTab, isMobile, setMenuOpen }) => {
 const ClientView = () => {
   const [clients, setClients] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
+  const [countyFilter, setCountyFilter] = useState(''); // 地區篩選
+  const [expandedCards, setExpandedCards] = useState({}); // 展開狀態
   const [loading, setLoading] = useState(true);
   const [officers, setOfficers] = useState([]); // 傑太承辦人列表
 
@@ -98,6 +102,9 @@ const ClientView = () => {
   const [newClientForm, setNewClientForm] = useState({
     name: '',
     taxId: '',
+    county: '', // 客戶所在地區
+    address: '', // 完整地址
+    phone: '', // 電話
     status: '設置階段',
     nextAction: '',
     deadline: '',
@@ -134,21 +141,33 @@ const ClientView = () => {
       if (error) throw error;
 
       // 將 Supabase 資料格式轉換為前端需要的格式
-      const formattedClients = data.map(client => ({
-        id: client.id,
-        name: client.name,
-        taxId: client.tax_id,
-        status: client.status,
-        phase: client.phase,
-        currentProgress: client.current_progress || '待確認',  // 新增：目前進度
-        nextAction: client.next_action || '待確認',
-        remarks: client.remarks || '',                         // 新增：備註
-        deadline: client.deadline || '未設定',
-        type: client.licenses?.map(l => l.type.charAt(0).toUpperCase() + l.type.slice(1)) || ['Air'],
-        licenses: client.licenses || [],
-        officer: client.officer
-      }));
+      const formattedClients = data.map(client => {
+        // 🔍 Debug: 檢查 officer 資料
+        if (client.officer_id && !client.officer) {
+          console.warn(`⚠️ 客戶 "${client.name}" 有 officer_id (${client.officer_id}) 但 officer 資料為空`);
+        }
 
+        return {
+          id: client.id,
+          name: client.name,
+          taxId: client.tax_id,
+          county: client.county || '', // 客戶所在地區
+          address: client.address || '', // 完整地址
+          phone: client.phone || '', // 電話
+          status: client.status,
+          phase: client.phase,
+          currentProgress: client.current_progress || '待確認',
+          nextAction: client.next_action || '待確認',
+          remarks: client.remarks || '',
+          deadline: client.deadline || '未設定',
+          type: client.licenses?.map(l => l.type.charAt(0).toUpperCase() + l.type.slice(1)) || ['Air'],
+          licenses: client.licenses || [],
+          officer: client.officer,
+          officer_id: client.officer_id
+        };
+      });
+
+      console.log('📋 載入客戶資料完成，共', formattedClients.length, '筆');
       setClients(formattedClients);
     } catch (error) {
       console.error('讀取客戶資料失敗:', error);
@@ -218,6 +237,35 @@ const ClientView = () => {
         formData.name = factoryInfo.facilityName || '';
         formData.industry = factoryInfo.industryName || '';
 
+        // 🏠 自動帶入地址
+        if (factoryInfo.address) {
+          formData.address = factoryInfo.address;
+          console.log('🏠 自動帶入地址:', factoryInfo.address);
+
+          // 📍 從地址自動判斷「區」（如新莊區、土城區）
+          if (!formData.county) {
+            const districtMatch = factoryInfo.address.match(/[縣市](.{1,3}[區鄉鎮市])/);
+            if (districtMatch) {
+              formData.county = districtMatch[1];
+              console.log('📍 從地址自動判斷區:', formData.county);
+            } else if (factoryInfo.county) {
+              // 如果地址解析失敗，使用 factories 的 county
+              formData.county = factoryInfo.county;
+              console.log('📍 使用 factories 的地區:', factoryInfo.county);
+            }
+          }
+        } else if (factoryInfo.county) {
+          // 如果沒有地址，但有 county，直接使用
+          formData.county = factoryInfo.county;
+          console.log('📍 自動帶入地區:', factoryInfo.county);
+        }
+
+        // 📞 自動帶入電話
+        if (factoryInfo.phone) {
+          formData.phone = factoryInfo.phone;
+          console.log('📞 自動帶入電話:', factoryInfo.phone);
+        }
+
         // 🎯 自動勾選委託項目（根據工廠資料的 licenses）
         const licenses = factoryInfo.licenses || {};
         if (licenses.air) autoSelectedLicenses.push('air');
@@ -280,6 +328,23 @@ const ClientView = () => {
         if (!formData.name && company.name) {
           formData.name = company.name;
         }
+
+        // 🏠 從經濟部帶入地址（如果還沒有地址）
+        if (!formData.address && company.address) {
+          formData.address = company.address;
+          console.log('🏠 從經濟部帶入地址:', company.address);
+
+          // 📍 從地址自動判斷「區」（如新莊區、土城區）
+          if (!formData.county && company.address) {
+            // 嘗試從地址取得「XX區」（支援台灣各縣市的區名稱）
+            const districtMatch = company.address.match(/[縣市](.{1,3}[區鄉鎮市])/);
+            if (districtMatch) {
+              formData.county = districtMatch[1];
+              console.log('📍 從地址自動判斷區:', formData.county);
+            }
+          }
+        }
+
         setMoeaData(company); // 儲存完整經濟部資料
       }
 
@@ -440,6 +505,9 @@ const ClientView = () => {
         .insert({
           tax_id: newClientForm.taxId,
           name: newClientForm.name,
+          county: newClientForm.county || null,
+          address: newClientForm.address || null, // 完整地址
+          phone: newClientForm.phone || null, // 電話
           status: newClientForm.status,
           phase: phaseMap[newClientForm.status] || 1,
           current_progress: newClientForm.currentProgress,
@@ -494,6 +562,9 @@ const ClientView = () => {
       setNewClientForm({
         name: '',
         taxId: '',
+        county: '',
+        address: '', // 清空地址
+        phone: '', // 清空電話
         status: '設置階段',
         nextAction: '',
         deadline: '',
@@ -738,9 +809,12 @@ const ClientView = () => {
     }
   };
 
-  const filteredClients = clients.filter(c =>
-    c.name.includes(searchTerm) || c.status.includes(searchTerm)
-  );
+  // 篩選客戶：名稱搜尋 + 地區篩選
+  const filteredClients = clients.filter(c => {
+    const matchesSearch = c.name.includes(searchTerm) || c.status.includes(searchTerm);
+    const matchesCounty = !countyFilter || c.county === countyFilter;
+    return matchesSearch && matchesCounty;
+  });
 
   if (loading) {
     return (
@@ -758,17 +832,32 @@ const ClientView = () => {
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h2 className="text-xl font-bold text-gray-800">客戶案件管理 (Clients)</h2>
-          <p className="text-sm text-gray-500">管理目前手上的案件進度與代辦事項。{clients.length > 0 && `（共 ${clients.length} 筆）`}</p>
+          <p className="text-sm text-gray-500">管理目前手上的案件進度與代辦事項。{clients.length > 0 && `（共 ${clients.length} 筆${countyFilter ? `，篩選 ${filteredClients.length} 筆` : ''}）`}</p>
         </div>
-        <div className="relative">
-          <Search className="w-4 h-4 absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
-          <input
-            type="text"
-            placeholder="搜尋客戶名稱..."
-            className="pl-9 pr-4 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 w-full md:w-64"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-          />
+        <div className="flex flex-col md:flex-row gap-2 md:gap-4">
+          {/* 地區篩選下拉選單 */}
+          <select
+            className="px-4 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white min-w-[140px]"
+            value={countyFilter}
+            onChange={(e) => setCountyFilter(e.target.value)}
+          >
+            <option value="">📍 所有地區</option>
+            {/* 動態從客戶資料取得所有地區（去重） */}
+            {[...new Set(clients.map(c => c.county).filter(Boolean))].sort().map(county => (
+              <option key={county} value={county}>{county}</option>
+            ))}
+          </select>
+          {/* 搜尋框 */}
+          <div className="relative">
+            <Search className="w-4 h-4 absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
+            <input
+              type="text"
+              placeholder="搜尋客戶名稱..."
+              className="pl-9 pr-4 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 w-full md:w-64"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+            />
+          </div>
         </div>
       </div>
 
@@ -858,6 +947,59 @@ const ClientView = () => {
                   </div>
                   <span className="text-sm font-medium text-gray-700">{client.officer.name}</span>
                   <span className="text-xs text-gray-400">({client.officer.title || '承辦人'})</span>
+                </div>
+              )}
+
+              {/* 展開/收合按鈕 */}
+              {(client.address || client.phone || client.county) && (
+                <button
+                  onClick={() => setExpandedCards(prev => ({ ...prev, [client.id]: !prev[client.id] }))}
+                  className="w-full mt-2 py-1.5 text-xs text-gray-500 hover:text-teal-600 hover:bg-teal-50 rounded transition-colors flex items-center justify-center gap-1"
+                >
+                  {expandedCards[client.id] ? (
+                    <><ChevronUp className="w-3 h-3" /> 收合詳細資訊</>
+                  ) : (
+                    <><ChevronDown className="w-3 h-3" /> 展開詳細資訊</>
+                  )}
+                </button>
+              )}
+
+              {/* 可展開的詳細資訊 */}
+              {expandedCards[client.id] && (
+                <div className="mt-2 pt-2 border-t border-gray-200 space-y-2 animate-fadeIn">
+                  {/* 地區 */}
+                  {client.county && (
+                    <div className="flex items-center gap-2 text-sm text-gray-600">
+                      <MapPin className="w-4 h-4 text-teal-500" />
+                      <span className="font-medium">{client.county}</span>
+                    </div>
+                  )}
+                  {/* 完整地址 */}
+                  {client.address && (
+                    <div className="flex items-start gap-2 text-sm text-gray-600">
+                      <MapPin className="w-4 h-4 text-gray-400 mt-0.5" />
+                      <span>{client.address}</span>
+                    </div>
+                  )}
+                  {/* 電話 */}
+                  {client.phone && (
+                    <div className="flex items-center gap-2 text-sm text-gray-600">
+                      <Phone className="w-4 h-4 text-gray-400" />
+                      <a href={`tel:${client.phone}`} className="hover:text-teal-600">{client.phone}</a>
+                    </div>
+                  )}
+                  {/* Google Maps 連結 */}
+                  {client.address && (
+                    <a
+                      href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(client.address)}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center gap-2 text-sm text-blue-600 hover:text-blue-800 bg-blue-50 px-3 py-2 rounded-lg hover:bg-blue-100 transition-colors"
+                    >
+                      <ExternalLink className="w-4 h-4" />
+                      🗺️ 開啟 Google Maps 導航
+                    </a>
+                  )}
                 </div>
               )}
             </div>
@@ -1030,6 +1172,49 @@ const ClientView = () => {
                   <option value="營運中">6️⃣ 營運中</option>
                   <option value="申請展延中">7️⃣ 申請展延中</option>
                 </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  📍 客戶所在地區
+                </label>
+                <input
+                  type="text"
+                  className="w-full border rounded-lg p-2"
+                  value={newClientForm.county}
+                  onChange={e => setNewClientForm({ ...newClientForm, county: e.target.value })}
+                  placeholder="例如：台北市、新北市"
+                  list="county-suggestions"
+                />
+                {/* 提供常用地區建議 */}
+                <datalist id="county-suggestions">
+                  <option value="台北市" />
+                  <option value="新北市" />
+                  <option value="桃園市" />
+                </datalist>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  🏠 完整地址
+                </label>
+                <input
+                  type="text"
+                  className="w-full border rounded-lg p-2"
+                  value={newClientForm.address}
+                  onChange={e => setNewClientForm({ ...newClientForm, address: e.target.value })}
+                  placeholder="例如：新北市土城區中央路三段XXX號"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  📞 聯絡電話
+                </label>
+                <input
+                  type="text"
+                  className="w-full border rounded-lg p-2"
+                  value={newClientForm.phone}
+                  onChange={e => setNewClientForm({ ...newClientForm, phone: e.target.value })}
+                  placeholder="例如：02-1234-5678"
+                />
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
