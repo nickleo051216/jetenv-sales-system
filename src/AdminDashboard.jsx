@@ -609,6 +609,9 @@ const ClientView = () => {
         .update({
           name: editingClient.name,
           tax_id: editingClient.taxId,
+          county: editingClient.county || null, // 地區
+          address: editingClient.address || null, // 地址
+          phone: editingClient.phone || null, // 電話
           status: editingClient.status,
           phase: phaseMap[editingClient.status] || editingClient.phase,
           current_progress: editingClient.currentProgress || null,
@@ -1423,6 +1426,45 @@ const ClientView = () => {
                       <option value="營運中">6️⃣ 營運中</option>
                       <option value="申請展延中">7️⃣ 申請展延中</option>
                     </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      📍 客戶所在地區
+                    </label>
+                    <input
+                      type="text"
+                      className="w-full border rounded-lg p-2"
+                      value={editingClient.county || ''}
+                      onChange={e => setEditingClient({ ...editingClient, county: e.target.value })}
+                      placeholder="例如：土城區、新莊區"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      🏠 完整地址
+                    </label>
+                    <input
+                      type="text"
+                      className="w-full border rounded-lg p-2"
+                      value={editingClient.address || ''}
+                      onChange={e => setEditingClient({ ...editingClient, address: e.target.value })}
+                      placeholder="例如：新北市土城區中央路三段XXX號"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      📞 聯絡電話
+                    </label>
+                    <input
+                      type="text"
+                      className="w-full border rounded-lg p-2"
+                      value={editingClient.phone || ''}
+                      onChange={e => setEditingClient({ ...editingClient, phone: e.target.value })}
+                      placeholder="例如：02-1234-5678"
+                    />
                   </div>
 
                   <div>
