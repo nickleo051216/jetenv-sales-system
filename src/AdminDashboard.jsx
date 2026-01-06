@@ -1016,9 +1016,9 @@ const ClientView = () => {
                             toxic: '☢️ 毒化',
                             soil: '🌍 土壤'
                           };
-                          const isExpired = license.expiry_date && new Date(license.expiry_date) < new Date();
-                          const isNearExpiry = license.expiry_date &&
-                            new Date(license.expiry_date) < new Date(Date.now() + 90 * 24 * 60 * 60 * 1000) &&
+                          const isExpired = license.expiration_date && new Date(license.expiration_date) < new Date();
+                          const isNearExpiry = license.expiration_date &&
+                            new Date(license.expiration_date) < new Date(Date.now() + 90 * 24 * 60 * 60 * 1000) &&
                             !isExpired;
 
                           return (
@@ -1027,10 +1027,10 @@ const ClientView = () => {
                                 {typeLabels[license.type.toLowerCase()] || license.type}
                               </span>
                               <span className={`font-medium ${isExpired ? 'text-red-600' :
-                                  isNearExpiry ? 'text-amber-600' :
-                                    'text-gray-700'
+                                isNearExpiry ? 'text-amber-600' :
+                                  'text-gray-700'
                                 }`}>
-                                {license.expiry_date || '未設定'}
+                                {license.expiration_date || '未設定'}
                                 {isExpired && ' ⚠️ 已逾期'}
                                 {isNearExpiry && ' ⏰ 將到期'}
                               </span>
