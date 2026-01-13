@@ -400,6 +400,77 @@ export default async function handler(req, res) {
         }
 
         // ========================================
+        // Step 2.7: 備用方案 - 直接用統編查 air_permits
+        // 當 EMS_S_01 API 查不到管編時使用
+        // ========================================
+        if ((!results.air?.permits || results.air.permits.length === 0) && getSupabase()) {
+            try {
+                // 準備兩種格式的統編：原始 + 去掉前導零
+                const taxIdVariants = [taxId, taxId.replace(/^0+/, '')];
+
+                const { data: airByUniformno, error: airUniError } = await getSupabase()
+                    .from('air_permits')
+                    .select('*')
+                    .in('uniformno', taxIdVariants);
+
+                if (!airUniError && airByUniformno && airByUniformno.length > 0) {
+                    console.log('✅ 用統編直接找到空污許可:', airByUniformno.length, '筆');
+
+                    // 民國年轉西元年
+                    const convertMinguoToWestern = (rocDate) => {
+                        if (!rocDate) return null;
+                        const str = String(rocDate).trim();
+                        // 已經是 ISO 格式
+                        if (/^\d{4}-\d{2}-\d{2}$/.test(str)) return str;
+                        // 民國年格式
+                        const parts = str.replace(/-/g, '/').split('/');
+                        if (parts.length === 3) {
+                            let year = parseInt(parts[0]);
+                            if (year < 1911) year += 1911;
+                            return `${year}-${parts[1].padStart(2, '0')}-${parts[2].padStart(2, '0')}`;
+                        }
+                        return null;
+                    };
+
+                    results.air = {
+                        found: true,
+                        permits: airByUniformno.map(p => ({
+                            emsNo: p.ems_no,
+                            expiryDate: convertMinguoToWestern(p.expiry_date),
+                            expiryDateRoc: p.expiry_date,
+                            facilityName: p.company_name,
+                            address: p.address,
+                            county: p.county
+                        })),
+                        source: 'supabase_uniformno'
+                    };
+
+                    // 找最新到期的許可證
+                    const validPermits = airByUniformno.filter(p => p.expiry_date);
+                    if (validPermits.length > 0) {
+                        const latestAir = validPermits.reduce((latest, current) => {
+                            const latestDate = convertMinguoToWestern(latest.expiry_date);
+                            const currentDate = convertMinguoToWestern(current.expiry_date);
+                            if (!latestDate) return current;
+                            if (!currentDate) return latest;
+                            return new Date(currentDate) > new Date(latestDate) ? current : latest;
+                        }, validPermits[0]);
+
+                        const westernDate = convertMinguoToWestern(latestAir.expiry_date);
+                        results.air.latestEndDate = westernDate;
+                        results.air.latestEndDateRoc = latestAir.expiry_date;
+                        results.summary.airPermitEndDate = westernDate;
+                        results.summary.airPermitEndDateRoc = latestAir.expiry_date;
+                    }
+
+                    results.found = true;
+                }
+            } catch (err) {
+                console.error('用統編查 air_permits 失敗:', err.message);
+            }
+        }
+
+        // ========================================
         // Step 3: 查 factories 表補充資料（你自己維護的）
         // ========================================
         if (getSupabase()) {
