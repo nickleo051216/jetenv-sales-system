@@ -27,7 +27,10 @@ export default async function handler(req, res) {
 
         const data = await response.json();
 
-        if (!data.records || data.records.length === 0) {
+        // 🔧 2025-01: 環境部 API 回傳格式已改為直接回傳陣列
+        const allRecords = Array.isArray(data) ? data : (data.records || []);
+
+        if (allRecords.length === 0) {
             return res.json({
                 found: false,
                 message: '無資料'
@@ -36,7 +39,7 @@ export default async function handler(req, res) {
 
         // 過濾出符合統編的資料
         // 欄位名稱：營利事業統一編號
-        const records = data.records.filter(r => {
+        const records = allRecords.filter(r => {
             const ban = r['營利事業統一編號'] || r['BAN'] || '';
             return ban === taxId;
         });

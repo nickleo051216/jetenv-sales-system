@@ -39,16 +39,17 @@ export default async function handler(req, res) {
 
         const data = await response.json();
 
-        if (!data.records || data.records.length === 0) {
+        // 🔧 2025-01: 環境部 API 回傳格式已改為直接回傳陣列
+        let records = Array.isArray(data) ? data : (data.records || []);
+
+        if (records.length === 0) {
             return res.json({
                 found: false,
                 message: '無資料',
                 note: '空污許可證詳細資料請至固定污染源平台查詢: https://aodmis.moenv.gov.tw/opendata/#/lq'
             });
         }
-
         // 過濾出符合條件的資料
-        let records = data.records;
 
         if (taxId) {
             records = records.filter(r => {

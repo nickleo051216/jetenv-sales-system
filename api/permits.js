@@ -54,13 +54,16 @@ export default async function handler(req, res) {
             const s01Res = await fetch(s01Url);
             const s01Data = await s01Res.json();
 
-            if (s01Data.records && s01Data.records.length > 0) {
-                console.log('✅ EMS_S_01 找到', s01Data.records.length, '筆工廠資料');
+            // 🔧 2025-01: 環境部 API 回傳格式已改為直接回傳陣列
+            const records = Array.isArray(s01Data) ? s01Data : (s01Data.records || []);
+
+            if (records.length > 0) {
+                console.log('✅ EMS_S_01 找到', records.length, '筆工廠資料');
 
                 results.found = true;
 
                 // 整理工廠資料（包含解列日期）
-                results.facilities = s01Data.records.map(r => ({
+                results.facilities = records.map(r => ({
                     emsNo: r.emsno,
                     facilityName: r.facilityname,
                     address: r.facilityaddress,
@@ -82,7 +85,7 @@ export default async function handler(req, res) {
                 }));
 
                 // 取得所有管編
-                emsNoList = [...new Set(s01Data.records.map(r => r.emsno).filter(Boolean))];
+                emsNoList = [...new Set(records.map(r => r.emsno).filter(Boolean))];
                 console.log('📋 管編列表:', emsNoList.join(', '));
 
                 // 設定 summary（聚合所有工廠的列管狀態）
