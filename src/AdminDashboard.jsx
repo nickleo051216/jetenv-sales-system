@@ -124,6 +124,29 @@ const ClientView = () => {
     wasteExpiry: ''
   });
 
+  // 🏷️ 設施類型判斷函數
+  const getFacilityType = (facilityName, source) => {
+    if (source === '經濟部登記') return { icon: '🏢', label: '公司' };
+    if (!facilityName) return { icon: '🏭', label: '工廠' };
+
+    const name = facilityName;
+    // 分公司
+    if (/分公司/.test(name)) return { icon: '🏬', label: '分公司' };
+    // 一廠、二廠、三廠...
+    const plantMatch = name.match(/([一二三四五六七八九十]+|\d+)廠/);
+    if (plantMatch) return { icon: '🏭', label: `${plantMatch[1]}廠` };
+    // 分廠
+    if (/分廠/.test(name)) return { icon: '🏭', label: '分廠' };
+    // 辦事處、辦公室
+    if (/辦事處|辦公室/.test(name)) return { icon: '🏢', label: '辦公室' };
+    // 倉庫
+    if (/倉庫/.test(name)) return { icon: '📦', label: '倉庫' };
+    // 總公司、總部
+    if (/總公司|總廠|總部/.test(name)) return { icon: '🏛️', label: '總部' };
+    // 預設
+    return { icon: '🏭', label: '工廠' };
+  };
+
   // 從 Supabase 讀取客戶資料與承辦人列表
   useEffect(() => {
     fetchClients();
@@ -435,27 +458,27 @@ const ClientView = () => {
 
           console.log('📍 收集到的地址選項:', addressOptions);
 
-          // 自動選擇主要設施：優先選有空污或水污列管的
-          let selectedFacility = addressOptions.find(f => f.isAirControlled || f.isWaterControlled);
-          // 如果沒有列管設施，選第一個環境部設施
-          if (!selectedFacility) {
-            selectedFacility = addressOptions.find(f => f.source === '環境部設施') || addressOptions[0];
+          // 🆕 如果有多個地址選項，顯示選擇彈窗讓用戶選擇
+          if (addressOptions.length > 1) {
+            console.log('📍 偵測到多個地址，顯示選擇器');
+            setFacilityOptions(addressOptions);
+            setPendingFormData(formData);
+            setPendingApiResults({ moeaResult, factoryResult, permitsResult, autoSelectedLicenses });
+            setShowFacilitySelector(true);
+            setLoading(false);
+            return; // 等待用戶選擇後再繼續
           }
 
-          if (selectedFacility) {
-            // 帶入地址（無條件覆蓋，確保一定更新）
+          // 只有一個地址，直接使用
+          if (addressOptions.length === 1) {
+            const selectedFacility = addressOptions[0];
             formData.address = selectedFacility.address;
-            console.log('🏠 自動帶入地址:', selectedFacility.address);
-
-            // 帶入地區
-            if (!formData.county) {
-              formData.county = selectedFacility.township || selectedFacility.county || '';
-              if (!formData.county && selectedFacility.address) {
-                const match = selectedFacility.address.match(/[縣市](.{1,3}[區鄉鎮市])/);
-                if (match) formData.county = match[1];
-              }
-              console.log('📍 自動帶入地區:', formData.county);
+            formData.county = selectedFacility.township || selectedFacility.county || '';
+            if (!formData.county && selectedFacility.address) {
+              const match = selectedFacility.address.match(/[縣市](.{1,3}[區鄉鎮市])/);
+              if (match) formData.county = match[1];
             }
+            console.log('🏠 自動帶入地址:', selectedFacility.address);
           }
         }
 
@@ -1221,6 +1244,91 @@ const ClientView = () => {
           <span className="font-medium">新增案件</span>
         </button>
       </div>
+
+      {/* 🆕 地址選擇彈窗 */}
+      {showFacilitySelector && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4" onClick={() => setShowFacilitySelector(false)}>
+          <div className="bg-white rounded-xl shadow-xl max-w-lg w-full max-h-[80vh] overflow-hidden" onClick={e => e.stopPropagation()}>
+            <div className="p-4 border-b border-gray-200 bg-gradient-to-r from-teal-500 to-cyan-500">
+              <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                <MapPin className="w-5 h-5" />
+                選擇設施地址
+              </h3>
+              <p className="text-sm text-white/80 mt-1">此統編有多個地址，請選擇要使用的地址</p>
+            </div>
+
+            <div className="p-4 overflow-y-auto max-h-[60vh] space-y-2">
+              {facilityOptions.map((facility, idx) => {
+                const typeInfo = getFacilityType(facility.facilityName, facility.source);
+                const isControlled = facility.isAirControlled || facility.isWaterControlled;
+
+                return (
+                  <button
+                    key={idx}
+                    onClick={() => handleFacilitySelect(facility)}
+                    className={`w-full text-left p-4 rounded-lg border-2 transition-all hover:border-teal-400 hover:bg-teal-50 ${isControlled ? 'border-teal-200 bg-teal-50/50' : 'border-gray-200 bg-white'
+                      }`}
+                  >
+                    <div className="flex items-start gap-3">
+                      {/* 類型圖示 */}
+                      <div className={`w-10 h-10 rounded-full flex items-center justify-center text-xl ${facility.source === '經濟部登記' ? 'bg-blue-100' : 'bg-green-100'
+                        }`}>
+                        {typeInfo.icon}
+                      </div>
+
+                      <div className="flex-1 min-w-0">
+                        {/* 類型標籤 + 設施名稱 */}
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className={`px-2 py-0.5 rounded text-xs font-medium ${facility.source === '經濟部登記'
+                              ? 'bg-blue-100 text-blue-700'
+                              : 'bg-green-100 text-green-700'
+                            }`}>
+                            {typeInfo.label}
+                          </span>
+                          {isControlled && (
+                            <span className="px-2 py-0.5 rounded text-xs font-medium bg-orange-100 text-orange-700">
+                              {facility.isAirControlled && '空污列管'}
+                              {facility.isAirControlled && facility.isWaterControlled && ' + '}
+                              {facility.isWaterControlled && '水污列管'}
+                            </span>
+                          )}
+                        </div>
+
+                        {/* 設施名稱 */}
+                        <div className="font-medium text-gray-900 mt-1 truncate">
+                          {facility.facilityName || '未命名設施'}
+                        </div>
+
+                        {/* 地址 */}
+                        <div className="text-sm text-gray-500 mt-1 flex items-start gap-1">
+                          <MapPin className="w-3 h-3 mt-1 flex-shrink-0" />
+                          <span>{facility.address}</span>
+                        </div>
+
+                        {/* 管編 */}
+                        {facility.emsNo && facility.emsNo !== '-' && (
+                          <div className="text-xs text-gray-400 mt-1">
+                            管編：{facility.emsNo}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+
+            <div className="p-4 border-t border-gray-200 bg-gray-50">
+              <button
+                onClick={() => setShowFacilitySelector(false)}
+                className="w-full py-2 px-4 text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-100 transition"
+              >
+                取消
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* 新增客戶 Modal */}
       {isAddModalOpen && (
