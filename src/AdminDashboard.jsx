@@ -99,6 +99,10 @@ const ClientView = () => {
   const [moeaData, setMoeaData] = useState(null); // 經濟部資料
   const [factoryData, setFactoryData] = useState(null); // 工廠資料（從 factories 表）
   const [permitsData, setPermitsData] = useState(null); // 許可證資料（從環境部 API）
+  const [facilityOptions, setFacilityOptions] = useState([]); // 🆕 工廠選擇候選清單
+  const [showFacilitySelector, setShowFacilitySelector] = useState(false); // 🆕 顯示工廠選擇彈窗
+  const [pendingFormData, setPendingFormData] = useState(null); // 🆕 暫存的表單資料
+  const [pendingApiResults, setPendingApiResults] = useState(null); // 🆕 暫存的 API 結果
   const [newClientForm, setNewClientForm] = useState({
     name: '',
     taxId: '',
@@ -394,36 +398,63 @@ const ClientView = () => {
         // 更新表單的委託項目
         formData.licenseTypes = autoSelectedLicenses;
 
-        // 🏠 從許可證 API 帶入地址和地區（如果還沒有的話）
+        // 🏠 從許可證 API 帶入地址和地區
         if (permitsResult.facilities && permitsResult.facilities.length > 0) {
-          // 找主要工廠（有空污或水污列管的那個）
-          const mainFacility = permitsResult.facilities.find(f =>
-            f.isAirControlled || f.isWaterControlled
-          ) || permitsResult.facilities[0];
+          // 收集所有不重複的地址選項（包含經濟部地址）
+          const addressOptions = [];
+          const seenAddresses = new Set();
 
-          // 帶入地址
-          if (!formData.address && mainFacility.address) {
-            formData.address = mainFacility.address;
-            console.log('🏠 從許可證 API 帶入地址:', mainFacility.address);
+          // 加入經濟部地址（如果有）
+          if (moeaResult.found && moeaResult.data?.address) {
+            const moeaAddr = moeaResult.data.address;
+            if (!seenAddresses.has(moeaAddr)) {
+              seenAddresses.add(moeaAddr);
+              addressOptions.push({
+                source: '經濟部登記',
+                emsNo: '-',
+                facilityName: moeaResult.data.name || formData.name,
+                address: moeaAddr,
+                county: '', // 從地址解析
+                township: '',
+                isAirControlled: false,
+                isWaterControlled: false
+              });
+            }
           }
 
-          // 帶入地區（縣市+區）
-          if (!formData.county) {
-            if (mainFacility.township) {
-              // 如果有 township（如「五股區」），直接使用
-              formData.county = mainFacility.township;
-              console.log('📍 從許可證 API 帶入地區(township):', mainFacility.township);
-            } else if (mainFacility.county) {
-              // 否則使用 county（如「新北市」）
-              formData.county = mainFacility.county;
-              console.log('📍 從許可證 API 帶入地區(county):', mainFacility.county);
-            } else if (mainFacility.address) {
-              // 從地址自動解析區
-              const districtMatch = mainFacility.address.match(/[縣市](.{1,3}[區鄉鎮市])/);
-              if (districtMatch) {
-                formData.county = districtMatch[1];
-                console.log('📍 從地址自動解析地區:', formData.county);
+          // 加入環境部各設施地址（去重複）
+          permitsResult.facilities.forEach(f => {
+            if (f.address && !seenAddresses.has(f.address)) {
+              seenAddresses.add(f.address);
+              addressOptions.push({
+                source: '環境部設施',
+                ...f
+              });
+            }
+          });
+
+          console.log('📍 收集到的地址選項:', addressOptions);
+
+          // 自動選擇主要設施：優先選有空污或水污列管的
+          let selectedFacility = addressOptions.find(f => f.isAirControlled || f.isWaterControlled);
+          // 如果沒有列管設施，選第一個環境部設施
+          if (!selectedFacility) {
+            selectedFacility = addressOptions.find(f => f.source === '環境部設施') || addressOptions[0];
+          }
+
+          if (selectedFacility) {
+            // 帶入地址（無條件覆蓋，確保一定更新）
+            formData.address = selectedFacility.address;
+            console.log('🏠 自動帶入地址:', selectedFacility.address);
+
+            // 帶入地區
+            if (!formData.county) {
+              formData.county = selectedFacility.township || selectedFacility.county || '';
+              if (!formData.county && selectedFacility.address) {
+                const match = selectedFacility.address.match(/[縣市](.{1,3}[區鄉鎮市])/);
+                if (match) formData.county = match[1];
               }
+              console.log('📍 自動帶入地區:', formData.county);
             }
           }
         }
@@ -525,6 +556,82 @@ const ClientView = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  // 🆕 處理用戶選擇設施後的邏輯
+  const handleFacilitySelect = (selectedFacility) => {
+    if (!pendingFormData || !pendingApiResults) {
+      console.error('沒有暫存的表單資料');
+      setShowFacilitySelector(false);
+      return;
+    }
+
+    const { moeaResult, factoryResult, permitsResult, autoSelectedLicenses } = pendingApiResults;
+    let formData = { ...pendingFormData };
+
+    // 帶入選擇的地址
+    formData.address = selectedFacility.address;
+    console.log('🏠 用戶選擇地址:', selectedFacility.address);
+
+    // 帶入地區
+    if (selectedFacility.township) {
+      formData.county = selectedFacility.township;
+    } else if (selectedFacility.county) {
+      formData.county = selectedFacility.county;
+    } else if (selectedFacility.address) {
+      const match = selectedFacility.address.match(/[縣市](.{1,3}[區鄉鎮市])/);
+      if (match) formData.county = match[1];
+    }
+    console.log('📍 用戶選擇地區:', formData.county);
+
+    // 繼續處理許可證到期日
+    if (permitsResult.summary?.waterPermitEndDate) {
+      formData.waterExpiry = permitsResult.summary.waterPermitEndDate.replace(/[\r\n]/g, '');
+    }
+    if (permitsResult.summary?.airPermitEndDate) {
+      formData.airExpiry = permitsResult.summary.airPermitEndDate.replace(/[\r\n]/g, '');
+    }
+    if (permitsResult.summary?.wastePermitEndDate) {
+      formData.wasteExpiry = permitsResult.summary.wastePermitEndDate.replace(/[\r\n]/g, '');
+    }
+    if (permitsResult.summary?.toxicPermitEndDate) {
+      formData.toxicExpiry = permitsResult.summary.toxicPermitEndDate.replace(/[\r\n]/g, '');
+    }
+
+    // 更新表單
+    setNewClientForm(formData);
+
+    // 清除暫存
+    setShowFacilitySelector(false);
+    setFacilityOptions([]);
+    setPendingFormData(null);
+    setPendingApiResults(null);
+
+    // 成功提示
+    const sources = [];
+    if (moeaResult.found) sources.push('政府資料');
+    if (factoryResult.found) sources.push('工廠登記');
+    if (permitsResult.found) sources.push('許可證資料');
+
+    let message = `🎉 成功帶入${sources.join(' + ')}！`;
+    message += `\n📍 已選擇：${selectedFacility.facilityName || selectedFacility.source}`;
+    message += `\n🏠 地址：${formData.address}`;
+
+    if (autoSelectedLicenses.length > 0) {
+      const licenseLabels = { air: '空氣', water: '廢水', waste: '廢棄物', toxic: '毒化', soil: '土壤' };
+      const selectedLabels = autoSelectedLicenses.map(l => licenseLabels[l]).join('、');
+      message += `\n已自動勾選委託項目：${selectedLabels}`;
+    }
+
+    if (permitsResult.summary?.airPermitEndDate) {
+      const airDate = permitsResult.summary.airPermitEndDate.replace(/[\r\n]/g, '');
+      message += `\n💨 空污許可到期日：${airDate}`;
+    }
+    if (permitsResult.summary?.waterPermitEndDate) {
+      message += `\n💧 水污許可到期日：${permitsResult.summary.waterPermitEndDate}`;
+    }
+
+    alert(message);
   };
 
   // 新增客戶
