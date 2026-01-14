@@ -394,6 +394,40 @@ const ClientView = () => {
         // 更新表單的委託項目
         formData.licenseTypes = autoSelectedLicenses;
 
+        // 🏠 從許可證 API 帶入地址和地區（如果還沒有的話）
+        if (permitsResult.facilities && permitsResult.facilities.length > 0) {
+          // 找主要工廠（有空污或水污列管的那個）
+          const mainFacility = permitsResult.facilities.find(f =>
+            f.isAirControlled || f.isWaterControlled
+          ) || permitsResult.facilities[0];
+
+          // 帶入地址
+          if (!formData.address && mainFacility.address) {
+            formData.address = mainFacility.address;
+            console.log('🏠 從許可證 API 帶入地址:', mainFacility.address);
+          }
+
+          // 帶入地區（縣市+區）
+          if (!formData.county) {
+            if (mainFacility.township) {
+              // 如果有 township（如「五股區」），直接使用
+              formData.county = mainFacility.township;
+              console.log('📍 從許可證 API 帶入地區(township):', mainFacility.township);
+            } else if (mainFacility.county) {
+              // 否則使用 county（如「新北市」）
+              formData.county = mainFacility.county;
+              console.log('📍 從許可證 API 帶入地區(county):', mainFacility.county);
+            } else if (mainFacility.address) {
+              // 從地址自動解析區
+              const districtMatch = mainFacility.address.match(/[縣市](.{1,3}[區鄉鎮市])/);
+              if (districtMatch) {
+                formData.county = districtMatch[1];
+                console.log('📍 從地址自動解析地區:', formData.county);
+              }
+            }
+          }
+        }
+
         // 🔥 自動填入許可證到期日（清理可能的換行符號）
         if (permitsResult.summary?.waterPermitEndDate) {
           formData.waterExpiry = permitsResult.summary.waterPermitEndDate.replace(/[\r\n]/g, '');

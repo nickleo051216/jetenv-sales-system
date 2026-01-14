@@ -1,13 +1,13 @@
 /**
- * 空污操作許可證爬蟲 (Semi-Automatic / 半自動版) v4
+ * 空污操作許可證爬蟲 (Full-Automatic / 全自動版) v1
  * 
  * 📌 使用方式：
- *   1. 執行：node scripts/air_permit_scraper_semi.js
- *   2. 瀏覽器會自動開啟 aodmis 網站
- *   3. 【手動操作】選擇縣市、鄉鎮區，點擊「查詢」
- *   4. 腳本會自動偵測並勾選「許可」
- *   5. 等待 30 秒後，腳本會自動開始爬取資料
- *   6. Excel 檔案會儲存在 data/ 目錄（每個地區一個分頁）
+ *   node scripts/air_permit_scraper_auto.js --county "新北市" --district "板橋區"
+ * 
+ * 📌 參數說明：
+ *   --county   縣市名稱 (必填)
+ *   --district 鄉鎮區名稱 (必填)
+ *   --headless 是否使用無頭模式 (可選，預設 false)
  * 
  * 依賴：
  *   npm install puppeteer exceljs
@@ -23,14 +23,53 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 // ============================================
+// 解析命令列參數
+// ============================================
+function parseArgs() {
+    const args = process.argv.slice(2);
+    const result = { county: '', district: '', headless: false };
+
+    for (let i = 0; i < args.length; i++) {
+        if (args[i] === '--county' && args[i + 1]) {
+            result.county = args[i + 1];
+            i++;
+        } else if (args[i] === '--district' && args[i + 1]) {
+            result.district = args[i + 1];
+            i++;
+        } else if (args[i] === '--headless') {
+            result.headless = true;
+        }
+    }
+
+    return result;
+}
+
+const cmdArgs = parseArgs();
+
+// 驗證參數
+if (!cmdArgs.county || !cmdArgs.district) {
+    console.log('❌ 錯誤：請提供縣市和區域參數');
+    console.log('');
+    console.log('使用方式：');
+    console.log('  node scripts/air_permit_scraper_auto.js --county "新北市" --district "板橋區"');
+    console.log('');
+    console.log('參數說明：');
+    console.log('  --county   縣市名稱 (必填)');
+    console.log('  --district 鄉鎮區名稱 (必填)');
+    console.log('  --headless 使用無頭模式 (可選)');
+    process.exit(1);
+}
+
+// ============================================
 // 設定區
 // ============================================
 const CONFIG = {
     BASE_URL: 'https://aodmis.moenv.gov.tw/opendata/#/lq',
-    WAIT_SECONDS: 30,   // 等待使用者手動操作的時間（縮短為 30 秒）
-    PAGE_DELAY: 3000,   // 換頁/點擊後等待時間
-    HEADLESS: false,    // 必須為 false 讓使用者操作
-    EXCEL_FILENAME: 'air_permits.xlsx', // 固定檔名，所有地區存在同一個檔案
+    PAGE_DELAY: 3000,
+    HEADLESS: cmdArgs.headless,
+    EXCEL_FILENAME: 'air_permits.xlsx',
+    TARGET_COUNTY: cmdArgs.county,
+    TARGET_DISTRICT: cmdArgs.district,
 };
 
 // ============================================
@@ -40,19 +79,138 @@ function sleep(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-function countdown(seconds) {
-    return new Promise(resolve => {
-        let remaining = seconds;
-        const interval = setInterval(() => {
-            process.stdout.write(`\r⏳ 剩餘 ${remaining} 秒...  `);
-            remaining--;
-            if (remaining < 0) {
-                clearInterval(interval);
-                console.log('\n');
-                resolve();
+// ============================================
+// 自動選擇縣市
+// ============================================
+async function selectCounty(page, countyName) {
+    console.log(`   🔽 選擇縣市: ${countyName}`);
+
+    const success = await page.evaluate((county) => {
+        const selects = document.querySelectorAll('select');
+        // 通常第一個 select 是縣市
+        const countySelect = selects[0];
+
+        if (countySelect) {
+            // 找到對應的 option
+            const options = Array.from(countySelect.options);
+            const found = options.find(opt => opt.text === county || opt.value === county);
+
+            if (found) {
+                countySelect.value = found.value;
+                // 觸發 change 事件
+                countySelect.dispatchEvent(new Event('change', { bubbles: true }));
+                // 如果有使用 jQuery
+                if (typeof $ !== 'undefined') {
+                    $(countySelect).trigger('change');
+                }
+                return { success: true, value: found.value };
             }
-        }, 1000);
+            return { success: false, options: options.map(o => o.text).slice(0, 10) };
+        }
+        return { success: false, error: 'Select not found' };
+    }, countyName);
+
+    if (!success.success) {
+        console.log(`   ⚠️ 可用選項:`, success.options || success.error);
+        throw new Error(`找不到縣市: ${countyName}`);
+    }
+
+    // 等待區域選單更新
+    await sleep(2000);
+    console.log(`   ✅ 縣市已選擇: ${countyName}`);
+}
+
+// ============================================
+// 自動選擇區域
+// ============================================
+async function selectDistrict(page, districtName) {
+    console.log(`   🔽 選擇區域: ${districtName}`);
+
+    const result = await page.evaluate((district) => {
+        const selects = document.querySelectorAll('select');
+        // 通常第二個 select 是區域
+        const districtSelect = selects[1];
+
+        if (districtSelect) {
+            // 找到對應的 option
+            const options = Array.from(districtSelect.options);
+            const found = options.find(opt => opt.text === district || opt.value === district);
+
+            if (found) {
+                districtSelect.value = found.value;
+                // 觸發 change 事件
+                districtSelect.dispatchEvent(new Event('change', { bubbles: true }));
+                // 如果有使用 jQuery
+                if (typeof $ !== 'undefined') {
+                    $(districtSelect).trigger('change');
+                }
+                return { success: true, value: found.value };
+            }
+            return { success: false, options: options.map(o => o.text).slice(0, 20) };
+        }
+        return { success: false, error: 'District select not found' };
+    }, districtName);
+
+    if (!result.success) {
+        console.log(`   ⚠️ 可用選項:`, result.options || result.error);
+        throw new Error(`找不到區域: ${districtName}`);
+    }
+
+    await sleep(500);
+    console.log(`   ✅ 區域已選擇: ${districtName}`);
+}
+
+// ============================================
+// 自動勾選「許可」並查詢
+// ============================================
+async function checkPermitAndQuery(page) {
+    console.log(`   ☑️  確認「許可」已勾選...`);
+
+    const result = await page.evaluate(() => {
+        const checkboxes = document.querySelectorAll('input[type="checkbox"]');
+        let permitCheckbox = null;
+
+        // 找到「許可」checkbox
+        for (const cb of checkboxes) {
+            const label = cb.parentElement?.textContent || '';
+            const nextLabel = cb.nextElementSibling?.textContent || '';
+            if (label.includes('許可') || nextLabel.includes('許可')) {
+                permitCheckbox = cb;
+                break;
+            }
+        }
+
+        if (permitCheckbox && !permitCheckbox.checked) {
+            permitCheckbox.click();
+            return { checked: true, wasUnchecked: true };
+        }
+
+        return { checked: permitCheckbox?.checked || false, wasUnchecked: false };
     });
+
+    if (result.wasUnchecked) {
+        console.log('   🔧 已自動勾選「許可」');
+    } else if (result.checked) {
+        console.log('   ✅「許可」已勾選');
+    }
+
+    // 點擊查詢按鈕
+    console.log('   🔍 點擊查詢按鈕...');
+    await page.evaluate(() => {
+        const buttons = document.querySelectorAll('button, input[type="button"]');
+        for (const btn of buttons) {
+            if (btn.textContent?.includes('查詢') || btn.value?.includes('查詢')) {
+                btn.click();
+                return;
+            }
+        }
+        // 備用：尋找橘色警告按鈕
+        const warnBtn = document.querySelector('.btn-warning, button[class*="warning"]');
+        if (warnBtn) warnBtn.click();
+    });
+
+    console.log('   ⏳ 等待查詢結果載入...');
+    await sleep(4000);
 }
 
 // ============================================
@@ -60,8 +218,10 @@ function countdown(seconds) {
 // ============================================
 async function main() {
     console.log('═══════════════════════════════════════════════════════');
-    console.log('   🏭 空污操作許可證爬蟲 (Semi-Automatic) v4');
+    console.log('   🏭 空污操作許可證爬蟲 (全自動版) v1');
     console.log('   📊 輸出格式：Excel（每個地區一個分頁）');
+    console.log('═══════════════════════════════════════════════════════');
+    console.log(`   🎯 目標: ${CONFIG.TARGET_COUNTY} ${CONFIG.TARGET_DISTRICT}`);
     console.log('═══════════════════════════════════════════════════════\n');
 
     const browser = await puppeteer.launch({
@@ -74,7 +234,7 @@ async function main() {
 
     const allData = [];
     const processedEmsNos = new Set();
-    let districtName = '未知地區'; // 用來命名 Excel 分頁
+    let districtName = CONFIG.TARGET_DISTRICT;
 
     try {
         // Step 1: 開啟網站
@@ -82,135 +242,17 @@ async function main() {
         await page.goto(CONFIG.BASE_URL, { waitUntil: 'networkidle2' });
         await sleep(2000);
 
-        // Step 2: 提示使用者手動操作
-        console.log('╔═══════════════════════════════════════════════════════╗');
-        console.log('║  📋 請在瀏覽器中執行以下操作：                        ║');
-        console.log('║                                                        ║');
-        console.log('║  1️⃣  選擇「縣市」（例如：新北市）                      ║');
-        console.log('║  2️⃣  選擇「鄉鎮區」（例如：五股區）                    ║');
-        console.log('║  3️⃣  點擊橘色「查詢」按鈕                              ║');
-        console.log('║                                                        ║');
-        console.log('║  💡 「許可」勾選會自動處理！                           ║');
-        console.log('║  📊 資料會儲存到同一個 Excel 檔，每個地區一個分頁     ║');
-        console.log('║                                                        ║');
-        console.log('╚═══════════════════════════════════════════════════════╝\n');
+        // Step 2: 自動選擇縣市和區域
+        console.log('\n🤖 自動選擇查詢條件...');
+        await selectCounty(page, CONFIG.TARGET_COUNTY);
+        await selectDistrict(page, CONFIG.TARGET_DISTRICT);
 
-        // Step 3: 倒數計時
-        await countdown(CONFIG.WAIT_SECONDS);
+        // Step 3: 勾選「許可」並查詢
+        await checkPermitAndQuery(page);
 
-        // Step 4: 🔥 自動偵測並確保「許可」已勾選
-        console.log('🔍 檢查設定狀態...');
+        console.log(`\n📍 開始爬取：${CONFIG.TARGET_COUNTY} ${districtName}\n`);
 
-        const checkResult = await page.evaluate(() => {
-            const result = {
-                countySelected: false,
-                permitChecked: false,
-                hasData: false,
-                county: '',
-                district: ''
-            };
-
-            // 檢查縣市是否已選擇（取得選項文字而非 value）
-            const selects = document.querySelectorAll('select');
-            if (selects[0] && selects[0].value && selects[0].value !== '') {
-                result.countySelected = true;
-                const selectedOption = selects[0].options[selects[0].selectedIndex];
-                result.county = selectedOption ? selectedOption.textContent.trim() : selects[0].value;
-            }
-            if (selects[1] && selects[1].value) {
-                const selectedOption = selects[1].options[selects[1].selectedIndex];
-                result.district = selectedOption ? selectedOption.textContent.trim() : selects[1].value;
-            }
-
-            // 檢查「許可」checkbox
-            const checkboxes = document.querySelectorAll('input[type="checkbox"]');
-            let permitCheckbox = null;
-
-            for (const cb of checkboxes) {
-                const label = cb.parentElement?.textContent || '';
-                const nextLabel = cb.nextElementSibling?.textContent || '';
-                if (label.includes('許可') || nextLabel.includes('許可')) {
-                    permitCheckbox = cb;
-                    result.permitChecked = cb.checked;
-                    break;
-                }
-            }
-
-            // 如果沒勾選，自動勾選
-            if (permitCheckbox && !permitCheckbox.checked) {
-                permitCheckbox.click();
-                result.permitChecked = true;
-                result.autoChecked = true;
-            }
-
-            // 檢查是否有資料
-            const rows = document.querySelectorAll('table tbody tr');
-            result.hasData = rows.length > 0;
-
-            return result;
-        });
-
-        // 設定地區名稱（用於 Excel 分頁）
-        districtName = checkResult.district || checkResult.county || '未知地區';
-
-        console.log(`   📍 縣市：${checkResult.county || '(未選擇)'}`);
-        console.log(`   📍 鄉鎮區：${checkResult.district || '(未選擇)'}`);
-        console.log(`   📊 分頁名稱：${districtName}`);
-        console.log(`   ☑️ 許可：${checkResult.permitChecked ? '已勾選' : '未勾選'}`);
-        if (checkResult.autoChecked) {
-            console.log('   🔧 已自動勾選「許可」！');
-        }
-        console.log(`   📊 資料：${checkResult.hasData ? '已載入' : '尚未載入'}`);
-
-        // 如果沒有選擇縣市，提示錯誤
-        if (!checkResult.countySelected) {
-            console.log('\n⚠️ 請先選擇縣市！下次執行時記得選擇。');
-            console.log('📌 10 秒後關閉瀏覽器...');
-            await sleep(10000);
-            await browser.close();
-            return;
-        }
-
-        // 🔥 如果自動勾選了「許可」，必須重新查詢
-        if (checkResult.autoChecked) {
-            console.log('\n🔄 重新執行查詢（讓「許可」篩選生效）...');
-            await page.evaluate(() => {
-                const buttons = document.querySelectorAll('button, input[type="button"]');
-                for (const btn of buttons) {
-                    if (btn.textContent?.includes('查詢') || btn.value?.includes('查詢')) {
-                        btn.click();
-                        return;
-                    }
-                }
-                const warnBtn = document.querySelector('.btn-warning, button[class*="warning"]');
-                if (warnBtn) warnBtn.click();
-            });
-            console.log('   ✅ 已重新查詢，等待結果載入...');
-            await sleep(4000);
-        }
-        // 如果沒有資料，也嘗試點擊查詢按鈕
-        else if (!checkResult.hasData) {
-            console.log('\n🔍 偵測到尚未查詢，嘗試點擊查詢按鈕...');
-            await page.evaluate(() => {
-                const buttons = document.querySelectorAll('button, input[type="button"]');
-                for (const btn of buttons) {
-                    if (btn.textContent?.includes('查詢') || btn.value?.includes('查詢')) {
-                        btn.click();
-                        return;
-                    }
-                }
-                const warnBtn = document.querySelector('.btn-warning, button[class*="warning"]');
-                if (warnBtn) warnBtn.click();
-            });
-            console.log('   ✅ 已點擊查詢');
-            await sleep(3000);
-        }
-
-        console.log('\n🔄 等待頁面穩定...');
-        await sleep(2000);
-        console.log('🚀 開始自動爬取資料！\n');
-
-        // Step 5: 取得總頁數
+        // Step 4: 取得總頁數
         const totalPages = await page.evaluate(() => {
             const paginationLinks = document.querySelectorAll('ul.pagination li a, .pagination a');
             let maxPage = 1;
@@ -224,7 +266,7 @@ async function main() {
         });
         console.log(`📊 檢測到共 ${totalPages} 頁資料\n`);
 
-        // Step 6: 開始爬取
+        // Step 5: 開始爬取
         let currentPage = 1;
         let totalFactories = 0;
 
@@ -408,8 +450,8 @@ async function main() {
             console.log('⚠️ 沒有擷取到任何資料');
         }
 
-        console.log('\n📌 10 秒後自動關閉瀏覽器...');
-        await sleep(10000);
+        console.log('\n📌 5 秒後自動關閉瀏覽器...');
+        await sleep(5000);
         await browser.close();
     }
 }
@@ -423,6 +465,7 @@ async function main() {
  */
 function findEarliestDate(dates) {
     if (!dates || dates.length === 0) return '';
+    // 排序並返回第一個（最早的）
     return dates.sort()[0];
 }
 
@@ -431,11 +474,14 @@ function findEarliestDate(dates) {
  */
 function findLatestDate(dates) {
     if (!dates || dates.length === 0) return '';
+    // 排序並返回最後一個（最晚的）
     return dates.sort().reverse()[0];
 }
 
 /**
  * 合併同一工廠的多個製程資料
+ * @param {Array} data - 原始資料陣列（每個製程一筆）
+ * @returns {Array} - 合併後的資料陣列（每個工廠一筆）
  */
 function consolidateFactoryData(data) {
     const factoryMap = new Map();
@@ -458,6 +504,7 @@ function consolidateFactoryData(data) {
 
         const factory = factoryMap.get(key);
 
+        // 累積製程資訊
         if (item.process_id && item.process_name) {
             factory.processes.push(`${item.process_id} - ${item.process_name}`);
         }
@@ -475,6 +522,7 @@ function consolidateFactoryData(data) {
         }
     });
 
+    // 轉換為最終格式
     return Array.from(factoryMap.values()).map(factory => ({
         county: factory.county,
         ems_no: factory.ems_no,
@@ -525,11 +573,10 @@ async function saveToExcel(data, sheetName) {
         { header: 'permit_nos', key: 'permit_nos', width: 25 },
         { header: 'earliest_expiry_date', key: 'earliest_expiry_date', width: 18 },
         { header: 'latest_expiry_date', key: 'latest_expiry_date', width: 18 },
-        { header: 'district', key: 'district', width: 10 }
+        { header: 'district', key: 'district', width: 10 } // 總表額外欄位：來源地區
     ];
 
     // ========== 1. 先處理地區分頁（寫入本次資料）==========
-    // 💡 策略：先寫入地區分頁，這樣後續重建總表時可以讀取到本次資料
     console.log(`\n📝 處理地區分頁...`);
 
     // 確保分頁名稱有效（Excel 限制：不能超過 31 字元，不能包含特殊字元）
@@ -568,6 +615,7 @@ async function saveToExcel(data, sheetName) {
     // 新增合併後的資料到地區分頁
     consolidatedData.forEach(row => {
         const excelRow = newDistrictSheet.addRow(row);
+        // 設定換行效果
         excelRow.getCell('processes').alignment = { wrapText: true, vertical: 'top' };
         excelRow.getCell('permit_nos').alignment = { wrapText: true, vertical: 'top' };
     });
@@ -575,7 +623,6 @@ async function saveToExcel(data, sheetName) {
     console.log(`   ✅ 已新增「${safeSheetName}」分頁，共 ${consolidatedData.length} 家工廠（${data.length} 個製程）`);
 
     // ========== 2. 重新創建「總表」分頁 ==========
-    // 💡 策略：刪除舊總表，從所有地區分頁（包含剛才新增的）讀取資料
     console.log(`\n🔄 重新創建總表（整合所有地區）...`);
 
     // 刪除舊的總表（如果存在）
@@ -609,6 +656,7 @@ async function saveToExcel(data, sheetName) {
 
         for (let i = 2; i <= districtSheet.rowCount; i++) {
             const row = districtSheet.getRow(i);
+            // 確保有資料才加入（避免空白列）
             const emsNo = row.getCell(2).value;
             if (emsNo) {
                 const summaryRow = summarySheet.addRow({
@@ -624,6 +672,7 @@ async function saveToExcel(data, sheetName) {
                     latest_expiry_date: row.getCell(10).value,
                     district: districtName
                 });
+                // 設定換行效果
                 summaryRow.getCell('processes').alignment = { wrapText: true, vertical: 'top' };
                 summaryRow.getCell('permit_nos').alignment = { wrapText: true, vertical: 'top' };
                 count++;

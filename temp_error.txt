@@ -1,0 +1,71 @@
+﻿node : file:///C:/Us
+ers/jeten/.gemini/an
+tigravity/scratch/je
+tenv-sales-system/sc
+ripts/sync_air_permi
+ts_to_supabase.js:13
+位於 線路:1 字元:1
++ node scripts/sync_
+air_permits_to_supab
+ase.js 2>&1 | Out-Fi
+le -FilePat ...
++ ~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~
+    + CategoryInfo  
+            : NotSpe
+cified    : (file://
+/C:/User.    .._supa
+base.js:13:S    trin
+g) [], RemoteEx    c
+eption
+    + FullyQualified
+Err    orId : Native
+Comman    dError
+ 
+const XLSX = require
+('xlsx');
+             ^
+
+ReferenceError: requ
+ire is not defined i
+n ES module scope, y
+ou can use import in
+stead
+This file is being t
+reated as an ES modu
+le because it has a 
+'.js' file extension
+ and 'C:\Users\jeten
+\.gemini\antigravity
+\scratch\jetenv-sale
+s-system\package.jso
+n' contains "type": 
+"module". To treat i
+t as a CommonJS scri
+pt, rename it to use
+ the '.cjs' file ext
+ension.
+    at file:///C:/Us
+ers/jeten/.gemini/an
+tigravity/scratch/je
+tenv-sales-system/sc
+ripts/sync_air_permi
+ts_to_supabase.js:13
+:14
+    at ModuleJob.run
+ (node:internal/modu
+les/esm/module_job:3
+77:25)
+    at async onImpor
+t.tracePromise.__pro
+to__ (node:internal/
+modules/esm/loader:6
+71:26)
+    at async asyncRu
+nEntryPointWithESMLo
+ader (node:internal/
+modules/run_main:101
+:5)
+
+Node.js v24.11.1

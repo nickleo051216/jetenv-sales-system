@@ -1,0 +1,43 @@
+{
+  "columns": [
+    "county",
+    "ems_no",
+    "company_name",
+    "address",
+    "process_count",
+    "processes",
+    "categories",
+    "permit_nos",
+    "earliest_expiry_date",
+    "latest_expiry_date",
+    "district"
+  ],
+  "sample": [
+    {
+      "county": "新北市",
+      "ems_no": "F1300085",
+      "company_name": "奇鈺精密鑄造股份有限公司",
+      "address": "新北市土城區沛陂里中山路一九號",
+      "process_count": 2,
+      "processes": "M01 - 鋼鑄造程序\nM02 - 金屬噴磨（噴砂）處理程序",
+      "categories": "操作",
+      "permit_nos": "新北市環操證字第F0990-05號\n新北市環操證字第F0991-06號",
+      "earliest_expiry_date": "115/11/18",
+      "latest_expiry_date": "115/11/18",
+      "district": "土城區"
+    },
+    {
+      "county": "新北市",
+      "ems_no": "F1300165",
+      "company_name": "凌宇化工股份有限公司",
+      "address": "新北市土城區沛陂里大同街一九號",
+      "process_count": 1,
+      "processes": "M02 - 化粧品製造程序",
+      "categories": "操作",
+      "permit_nos": "新北市環操證字第F1985-02號",
+      "earliest_expiry_date": "116/11/08",
+      "latest_expiry_date": "116/11/08",
+      "district": "土城區"
+    }
+  ]
+}

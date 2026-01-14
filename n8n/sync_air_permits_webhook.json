@@ -1,0 +1,198 @@
+{
+    "name": "Sync Air Permits from Google Sheets",
+    "nodes": [
+        {
+            "parameters": {
+                "httpMethod": "POST",
+                "path": "sync-air-permits",
+                "responseMode": "responseNode",
+                "options": {}
+            },
+            "id": "webhook-trigger",
+            "name": "Webhook",
+            "type": "n8n-nodes-base.webhook",
+            "typeVersion": 2,
+            "position": [
+                250,
+                300
+            ],
+            "webhookId": "sync-air-permits"
+        },
+        {
+            "parameters": {
+                "jsCode": "// 從 Webhook 取得資料\nconst input = $input.first().json;\nconst records = input.records || [];\nconst sheetName = input.sheetName || 'Unknown';\n\nconsole.log(`📥 收到 ${records.length} 筆資料，來自工作表：${sheetName}`);\n\nif (records.length === 0) {\n  throw new Error('沒有收到任何資料');\n}\n\n// 轉換資料格式，準備 Upsert\nconst formatted = records.map(r => ({\n  ems_no: r.ems_no || '',\n  county: r.county || '',\n  company_name: r.company_name || '',\n  address: r.address || '',\n  process_id: '',\n  process_name: '',\n  category: r.category || '操作',\n  permit_no: '',\n  effective_date: null,\n  expiry_date: r.expiry_date || ''  // 已經是 YYYY-MM-DD 格式\n}));\n\nreturn formatted.map(item => ({ json: item }));"
+            },
+            "id": "code-transform",
+            "name": "格式轉換",
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 2,
+            "position": [
+                470,
+                300
+            ]
+        },
+        {
+            "parameters": {
+                "operation": "upsert",
+                "tableId": "air_permits",
+                "conflictColumns": [
+                    "ems_no"
+                ],
+                "fieldsToSend": {
+                    "fieldMappings": [
+                        {
+                            "fieldName": "ems_no",
+                            "fieldValue": "={{ $json.ems_no }}"
+                        },
+                        {
+                            "fieldName": "county",
+                            "fieldValue": "={{ $json.county }}"
+                        },
+                        {
+                            "fieldName": "company_name",
+                            "fieldValue": "={{ $json.company_name }}"
+                        },
+                        {
+                            "fieldName": "address",
+                            "fieldValue": "={{ $json.address }}"
+                        },
+                        {
+                            "fieldName": "process_id",
+                            "fieldValue": "={{ $json.process_id }}"
+                        },
+                        {
+                            "fieldName": "process_name",
+                            "fieldValue": "={{ $json.process_name }}"
+                        },
+                        {
+                            "fieldName": "category",
+                            "fieldValue": "={{ $json.category }}"
+                        },
+                        {
+                            "fieldName": "permit_no",
+                            "fieldValue": "={{ $json.permit_no }}"
+                        },
+                        {
+                            "fieldName": "expiry_date",
+                            "fieldValue": "={{ $json.expiry_date }}"
+                        }
+                    ]
+                }
+            },
+            "id": "supabase-upsert",
+            "name": "Upsert Supabase",
+            "type": "n8n-nodes-base.supabase",
+            "typeVersion": 1,
+            "position": [
+                690,
+                300
+            ],
+            "credentials": {
+                "supabaseApi": {
+                    "id": "RnsK9FrQBnMRc38T",
+                    "name": "nickleo051216 jet"
+                }
+            }
+        },
+        {
+            "parameters": {
+                "jsCode": "// 統計結果\nconst items = $input.all();\nconst successCount = items.length;\n\nreturn [{\n  json: {\n    success: true,\n    message: `✅ 成功同步 ${successCount} 筆資料`,\n    count: successCount,\n    timestamp: new Date().toISOString()\n  }\n}];"
+            },
+            "id": "code-result",
+            "name": "統計結果",
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 2,
+            "position": [
+                910,
+                300
+            ]
+        },
+        {
+            "parameters": {
+                "respondWith": "json",
+                "responseBody": "={{ $json }}",
+                "options": {}
+            },
+            "id": "respond-success",
+            "name": "回應成功",
+            "type": "n8n-nodes-base.respondToWebhook",
+            "typeVersion": 1.1,
+            "position": [
+                1130,
+                300
+            ]
+        },
+        {
+            "parameters": {
+                "respondWith": "json",
+                "responseBody": "={\"success\": false, \"error\": \"{{ $json.error.message }}\"}",
+                "options": {
+                    "responseCode": 500
+                }
+            },
+            "id": "respond-error",
+            "name": "回應錯誤",
+            "type": "n8n-nodes-base.respondToWebhook",
+            "typeVersion": 1.1,
+            "position": [
+                910,
+                500
+            ]
+        }
+    ],
+    "connections": {
+        "Webhook": {
+            "main": [
+                [
+                    {
+                        "node": "格式轉換",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "格式轉換": {
+            "main": [
+                [
+                    {
+                        "node": "Upsert Supabase",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Upsert Supabase": {
+            "main": [
+                [
+                    {
+                        "node": "統計結果",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "統計結果": {
+            "main": [
+                [
+                    {
+                        "node": "回應成功",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        }
+    },
+    "settings": {
+        "executionOrder": "v1"
+    },
+    "staticData": null,
+    "meta": {
+        "templateCredsSetupCompleted": true
+    },
+    "pinData": {},
+    "tags": []
+}
