@@ -1247,7 +1247,7 @@ const ClientView = () => {
 
       {/* 🆕 地址選擇彈窗 */}
       {showFacilitySelector && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4" onClick={() => setShowFacilitySelector(false)}>
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-[60] p-4" onClick={() => setShowFacilitySelector(false)}>
           <div className="bg-white rounded-xl shadow-xl max-w-lg w-full max-h-[80vh] overflow-hidden" onClick={e => e.stopPropagation()}>
             <div className="p-4 border-b border-gray-200 bg-gradient-to-r from-teal-500 to-cyan-500">
               <h3 className="text-lg font-bold text-white flex items-center gap-2">
@@ -1280,8 +1280,8 @@ const ClientView = () => {
                         {/* 類型標籤 + 設施名稱 */}
                         <div className="flex items-center gap-2 flex-wrap">
                           <span className={`px-2 py-0.5 rounded text-xs font-medium ${facility.source === '經濟部登記'
-                              ? 'bg-blue-100 text-blue-700'
-                              : 'bg-green-100 text-green-700'
+                            ? 'bg-blue-100 text-blue-700'
+                            : 'bg-green-100 text-green-700'
                             }`}>
                             {typeInfo.label}
                           </span>
