@@ -343,13 +343,21 @@ export default async function handler(req, res) {
                 if (!airError && airPermits && airPermits.length > 0) {
                     console.log('✅ 找到空污許可:', airPermits.length, '筆');
 
-                    // 民國年轉西元年的函數
                     const convertToWesternDate = (rocDate) => {
                         if (!rocDate) return null;
-                        // 格式可能是 "114/05/12" 或 "114-05-12"
-                        const parts = rocDate.replace(/-/g, '/').split('/');
+                        // 格式可能是 "114/05/12" 或 "114-05-12" 或 "2026-05-12"
+                        const str = String(rocDate).trim();
+                        // 已經是 ISO 格式 (YYYY-MM-DD)
+                        if (/^\d{4}-\d{2}-\d{2}$/.test(str)) return str;
+
+                        const parts = str.replace(/-/g, '/').split('/');
                         if (parts.length === 3) {
-                            const year = parseInt(parts[0]) + 1911;
+                            let year = parseInt(parts[0]);
+                            // 修正：只有當年份小於 1911 (民國年) 才加 1911
+                            // 如果是 2026，這裡如果不判斷會變成 3937
+                            if (year < 1911) {
+                                year += 1911;
+                            }
                             const month = parts[1].padStart(2, '0');
                             const day = parts[2].padStart(2, '0');
                             return `${year}-${month}-${day}`;
