@@ -38,6 +38,11 @@ const LicenseCard = ({ type, data }) => {
         default: break;
     }
 
+    // 允許 override
+    if (data.statusText) {
+        statusText = data.statusText;
+    }
+
     return (
         <div className={`border-l-8 rounded-r-xl p-4 shadow-md bg-white flex items-center justify-between mb-4 transform hover:scale-[1.02] transition duration-200 ${colorClass.replace('text-', 'border-')}`}>
             <div className="flex items-center gap-4">
@@ -237,14 +242,26 @@ const ClientPortal = () => {
         licenses.forEach(license => {
             const type = license.type?.toLowerCase();
             if (formatted[type]) {
-                formatted[type] = {
-                    status: mapLicenseStatus(license.status, license.expiration_date),
-                    date: license.expiration_date || '待確認',
-                    name: license.name,
-                    workflowStage: license.workflow_stage,
-                    nextAction: license.next_action,
-                    expectedDate: license.expected_date
-                };
+                // 特殊規則：廢棄物 (waste) 顯示為長期有效
+                if (type === 'waste') {
+                    formatted[type] = {
+                        status: 'normal',
+                        statusText: '無須展延',
+                        date: '長期有效',
+                        name: license.name || '廢棄物清理計畫書',
+                        workflowStage: license.workflow_stage,
+                        nextAction: license.next_action
+                    };
+                } else {
+                    formatted[type] = {
+                        status: mapLicenseStatus(license.status, license.expiration_date),
+                        date: license.expiration_date || '待確認',
+                        name: license.name,
+                        workflowStage: license.workflow_stage,
+                        nextAction: license.next_action,
+                        expectedDate: license.expected_date
+                    };
+                }
             }
         });
 
@@ -721,8 +738,8 @@ const ClientPortal = () => {
                                                         <div className="flex items-center justify-between">
                                                             <p className="text-sm font-medium text-gray-700">{task.name}</p>
                                                             <span className={`px-2 py-0.5 text-xs rounded-full font-bold ${task.status === 'done' ? 'bg-green-100 text-green-700' :
-                                                                    task.status === 'delayed' ? 'bg-red-100 text-red-700' :
-                                                                        'bg-gray-100 text-gray-600'
+                                                                task.status === 'delayed' ? 'bg-red-100 text-red-700' :
+                                                                    'bg-gray-100 text-gray-600'
                                                                 }`}>
                                                                 {task.status === 'done' ? '已完成' : task.status === 'delayed' ? '延遲' : '處理中'}
                                                             </span>
