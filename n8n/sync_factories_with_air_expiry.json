@@ -1,0 +1,372 @@
+{
+  "nodes": [
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "69d9b57c-405f-4070-87cc-11ae650b4fa2",
+              "leftValue": "={{ $json['換證年'] }}",
+              "rightValue": 11606,
+              "operator": {
+                "type": "number",
+                "operation": "lt"
+              }
+            },
+            {
+              "id": "a2dd58ff-5092-4e0b-8200-f5e1af812690",
+              "leftValue": "={{ $json['換證年'] }}",
+              "rightValue": "",
+              "operator": {
+                "type": "number",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            },
+            {
+              "id": "84d6c7f8-5e16-4171-8b58-86ecb2610b05",
+              "leftValue": "={{ $json['換證年'] }}",
+              "rightValue": 11412,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.filter",
+      "typeVersion": 2.3,
+      "position": [
+        -1264,
+        16
+      ],
+      "id": "941848a2-318f-4014-b918-fbeb0ec247e0",
+      "name": "11412 < X <11606"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        -1040,
+        16
+      ],
+      "id": "1ad63e45-616c-4a50-8db8-59139a83c200",
+      "name": "Loop Over Items"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.noOp",
+      "name": "Replace Me",
+      "typeVersion": 1,
+      "position": [
+        -144,
+        -64
+      ],
+      "id": "2ea50ae6-1446-478d-811c-59e05786d123"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "730e8dee-0b13-4747-9da9-ce0c1c873492",
+              "leftValue": "={{ $json.uniformno }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "empty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        -592,
+        -128
+      ],
+      "id": "968f0f60-d759-40d7-a172-92063f141716",
+      "name": "If"
+    },
+    {
+      "parameters": {
+        "useCustomSchema": true,
+        "tableId": "factories",
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "emsno",
+              "fieldValue": "={{ $('Loop Over Items').item.json.emsno }}"
+            },
+            {
+              "fieldId": "uniformno",
+              "fieldValue": "={{ $('Loop Over Items').item.json.uniformno }}"
+            },
+            {
+              "fieldId": "facilityname",
+              "fieldValue": "={{ $('Loop Over Items').item.json.facilityname }}"
+            },
+            {
+              "fieldId": "facilityaddress",
+              "fieldValue": "={{ $('Loop Over Items').item.json.facilityaddress }}"
+            },
+            {
+              "fieldId": "industryareaname",
+              "fieldValue": "={{ $('Loop Over Items').item.json.industryareaname }}"
+            },
+            {
+              "fieldId": "industryid",
+              "fieldValue": "={{ $('Loop Over Items').item.json.industryid }}"
+            },
+            {
+              "fieldId": "industryname",
+              "fieldValue": "={{ $('Loop Over Items').item.json.industryname }}"
+            },
+            {
+              "fieldId": "isair",
+              "fieldValue": "={{ $('Loop Over Items').item.json.isair }}"
+            },
+            {
+              "fieldId": "iswater",
+              "fieldValue": "={{ $('Loop Over Items').item.json.iswater }}"
+            },
+            {
+              "fieldId": "iswaste",
+              "fieldValue": "={{ $('Loop Over Items').item.json.iswaste }}"
+            },
+            {
+              "fieldId": "istoxic",
+              "fieldValue": "={{ $('Loop Over Items').item.json.istoxic }}"
+            },
+            {
+              "fieldId": "issoil",
+              "fieldValue": "={{ $('Loop Over Items').item.json.issoil }}"
+            },
+            {
+              "fieldId": "consultant_company",
+              "fieldValue": "={{ $('Loop Over Items').item.json[\"顧問公司\"] }}"
+            },
+            {
+              "fieldId": "phone",
+              "fieldValue": "={{ $('Loop Over Items').item.json[\"電話\"] }}"
+            },
+            {
+              "fieldId": "renewal_year",
+              "fieldValue": "={{ $('Loop Over Items').item.json[\"換證年\"] }}"
+            },
+            {
+              "fieldId": "notes",
+              "fieldValue": "={{ $('Loop Over Items').item.json[\"備註\"] }}"
+            },
+            {
+              "fieldId": "scheduled_date",
+              "fieldValue": "={{ $('Loop Over Items').item.json[\"預計排程\"] }}"
+            },
+            {
+              "fieldId": "result",
+              "fieldValue": "={{ $('Loop Over Items').item.json[\"結果\"] }}"
+            },
+            {
+              "fieldId": "waterreleasedate",
+              "fieldValue": "={{ (() => { const roc = $('Loop Over Items').item.json['許可證效期(水)']; if (!roc) return null; const match = roc.match(/(\\d+)-(\\d+)-(\\d+)/); if (match) { const year = parseInt(match[1]) + 1911; return `${year}-${match[2]}-${match[3]}`; } return null; })() }}"
+            },
+            {
+              "fieldId": "airreleasedate",
+              "fieldValue": "={{ (() => { const roc = $('Loop Over Items').item.json['許可證效期(空氣)']; if (!roc) return null; const match = roc.match(/(\\d+)-(\\d+)-(\\d+)/); if (match) { const year = parseInt(match[1]) + 1911; return `${year}-${match[2]}-${match[3]}`; } return null; })() }}"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        -368,
+        -128
+      ],
+      "id": "8e80d308-ee59-4859-903c-0cd5f0579045",
+      "name": "一個一個新增",
+      "credentials": {
+        "supabaseApi": {
+          "id": "RnsK9FrQBnMRc38T",
+          "name": "nickleo051216 jet"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "tableId": "factories",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "uniformno",
+              "keyValue": "={{ $json.uniformno }}"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        -816,
+        -128
+      ],
+      "id": "f7c33989-d092-4bcb-8060-07961c4b3899",
+      "name": "取得該統編是否已存在",
+      "alwaysOutputData": true,
+      "credentials": {
+        "supabaseApi": {
+          "id": "RnsK9FrQBnMRc38T",
+          "name": "nickleo051216 jet"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "1MeVmMZYOjrXAlTBlDIc7VoM30HuG1MufUgSPJpEEOvI",
+          "mode": "list",
+          "cachedResultName": "環境保護許可管理系統",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1MeVmMZYOjrXAlTBlDIc7VoM30HuG1MufUgSPJpEEOvI/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 1638846679,
+          "mode": "list",
+          "cachedResultName": "土城區",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1MeVmMZYOjrXAlTBlDIc7VoM30HuG1MufUgSPJpEEOvI/edit#gid=1638846679"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        -1488,
+        16
+      ],
+      "id": "03643c32-b186-41c5-acb9-48a4216e5421",
+      "name": "同步區",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "YKWnva5YREgR4MSb",
+          "name": "jetenv02"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "11412 < X <11606": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop Over Items": {
+      "main": [
+        [],
+        [
+          {
+            "node": "取得該統編是否已存在",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Replace Me": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If": {
+      "main": [
+        [
+          {
+            "node": "一個一個新增",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "一個一個新增": {
+      "main": [
+        [
+          {
+            "node": "Replace Me",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "取得該統編是否已存在": {
+      "main": [
+        [
+          {
+            "node": "If",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "同步區": {
+      "main": [
+        [
+          {
+            "node": "11412 < X <11606",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "5cb73612af9c3d99fb9474cf656425558c43c24de4951be223ad83a0b24b4e43"
+  }
+}

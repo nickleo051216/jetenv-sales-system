@@ -175,6 +175,7 @@ const ClientPortal = () => {
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState(null);
     const [officialData, setOfficialData] = useState(null);
+    const [historyExpanded, setHistoryExpanded] = useState(false); // 控制歷史記錄折疊
 
     useEffect(() => {
         const checkMobile = () => setIsMobile(window.innerWidth < 768);
@@ -190,11 +191,18 @@ const ClientPortal = () => {
         return Math.round((validLicenses / licenses.length) * 100);
     }, []);
 
-    // 輔助函式:判斷專案階段
+    // 輔助函式:判斷專案階段 (7個階段)
     const determineProjectStatus = useCallback((status) => {
-        if (status === '營運中') return 'permission';
-        if (status === '試車階段') return 'trial';
-        return 'setup';
+        const statusMap = {
+            '設置階段': 'setup',
+            '規劃階段': 'planning',
+            '設置許可申請中': 'permit-setup',
+            '試車階段': 'trial',
+            '操作許可申請中': 'permit-operate',
+            '營運中': 'operating',
+            '申請展延中': 'renewal'
+        };
+        return statusMap[status] || 'setup';
     }, []);
 
     // 輔助函式:映射許可證狀態
@@ -227,11 +235,11 @@ const ClientPortal = () => {
         if (!licenses) return formatted;
 
         licenses.forEach(license => {
-            const type = license.type;
+            const type = license.type?.toLowerCase();
             if (formatted[type]) {
                 formatted[type] = {
-                    status: mapLicenseStatus(license.status, license.valid_until),
-                    date: license.valid_until || '長期有效',
+                    status: mapLicenseStatus(license.status, license.expiration_date),
+                    date: license.expiration_date || '待確認',
                     name: license.name,
                     workflowStage: license.workflow_stage,
                     nextAction: license.next_action,
@@ -242,6 +250,34 @@ const ClientPortal = () => {
 
         return formatted;
     }, [mapLicenseStatus]);
+
+    // 輔助函式:找出最近到期的許可證日期
+    const findNearestExpiry = useCallback((licenses) => {
+        if (!licenses || licenses.length === 0) return { date: '待確認', type: null };
+
+        const typeLabels = { air: '空污', water: '水污', waste: '廢棄物', toxic: '毒化物' };
+
+        const validLicenses = licenses
+            .filter(l => l.expiration_date)
+            .map(l => ({
+                date: new Date(l.expiration_date),
+                type: l.type?.toLowerCase(),
+                label: typeLabels[l.type?.toLowerCase()] || l.type
+            }))
+            .filter(l => !isNaN(l.date.getTime()));
+
+        if (validLicenses.length === 0) return { date: '待確認', type: null };
+
+        const nearest = validLicenses.reduce((min, curr) =>
+            curr.date < min.date ? curr : min
+        );
+
+        return {
+            date: nearest.date.toISOString().split('T')[0],
+            type: nearest.type,
+            label: nearest.label
+        };
+    }, []);
 
     const handleSearch = useCallback(async (taxIdToSearch) => {
         const searchTaxId = taxIdToSearch || inputTaxId;
@@ -257,7 +293,7 @@ const ClientPortal = () => {
                 .from('clients')
                 .select(`
                     *,
-                    officer:officers(name, phone, title, avatar_color),
+                    officer:officers(name, phone, title, avatar_color, email),
                     licenses(*)
                 `)
                 .eq('tax_id', searchTaxId)
@@ -278,36 +314,41 @@ const ClientPortal = () => {
                 return;
             }
 
-            // 同步查詢經濟部資料 (不阻擋主要流程)
-            fetch(`/api/moea?taxId=${searchTaxId}`)
-                .then(res => res.json())
-                .then(data => {
-                    if (data.found) {
-                        setOfficialData(data.data);
-                    }
-                })
-                .catch(err => console.error('Failed to fetch official data:', err));
+            // 暫時移除 MOEA API 呼叫，避免在純前端環境報錯
+            // fetch(`/api/moea?taxId=${searchTaxId}`) ...
 
             // 轉換資料格式為前端需要的格式
+            const nearestExpiry = findNearestExpiry(client.licenses);
+
             const formattedResult = {
+                id: client.id, // ID 用於查詢 overrides
+                // 優先使用 clients.type，若無則從 licenses 推導
+                type: client.type || (client.licenses || []).map(l => l.type),
                 taxId: client.tax_id,
                 name: client.name,
                 officer: client.officer ? {
                     name: client.officer.name,
                     title: client.officer.title || '專案經理',
                     phone: client.officer.phone,
+                    email: client.officer.email,
                     avatarColor: client.officer.avatar_color || 'bg-blue-600'
                 } : {
                     name: '傑太團隊',
                     title: '專案經理',
                     phone: '(02)6609-5888',
+                    email: 'jetenv92662049@gmail.com',
                     avatarColor: 'bg-blue-600'
                 },
                 projectInfo: {
-                    deadline: client.deadline || '待確認',
+                    deadline: nearestExpiry.date,
+                    deadlineType: nearestExpiry.label, // 新增: 顯示哪個許可證
                     progress: calculateProgress(client.licenses),
-                    status: determineProjectStatus(client.status)
+                    status: determineProjectStatus(client.status),
+                    statusText: client.status // 新增: 原始狀態文字
                 },
+                currentProgress: client.current_progress || '暫無資訊',
+                nextAction: client.next_action || '待確認',
+                remarks: client.remarks || '',
                 licenses: formatLicenses(client.licenses),
                 tasks: [] // 如果有 tasks 表可以在這裡查詢
             };
@@ -320,7 +361,7 @@ const ClientPortal = () => {
         } finally {
             setIsLoading(false);
         }
-    }, [calculateProgress, determineProjectStatus, formatLicenses, inputTaxId]);
+    }, [calculateProgress, determineProjectStatus, findNearestExpiry, formatLicenses, inputTaxId]);
 
     // Deep Linking: Auto-login if ?id=... exists
     useEffect(() => {
@@ -474,6 +515,12 @@ const ClientPortal = () => {
                                             <Globe size={20} />
                                             <span>公司官網</span>
                                         </a>
+                                        {searchResult.officer.email && (
+                                            <a href={`mailto:${searchResult.officer.email}`} className="flex items-center justify-center gap-2 bg-orange-500 hover:bg-orange-600 text-white px-6 py-3 rounded-xl shadow-lg transition font-bold">
+                                                <Mail size={20} />
+                                                <span>Email</span>
+                                            </a>
+                                        )}
                                     </div>
                                 </div>
                             )}
@@ -527,8 +574,13 @@ const ClientPortal = () => {
                                 <div className="p-3 bg-red-50 text-red-500 rounded-full mb-2">
                                     <Calendar size={32} />
                                 </div>
-                                <p className="text-gray-500 text-sm font-bold mb-1">最近截止日期</p>
+                                <p className="text-gray-500 text-sm font-bold mb-1">最近許可到期日</p>
                                 <p className="text-2xl font-black text-gray-800">{searchResult.projectInfo.deadline}</p>
+                                {searchResult.projectInfo.deadlineType && (
+                                    <span className="text-xs text-red-600 bg-red-50 px-2 py-0.5 rounded mt-1">
+                                        {searchResult.projectInfo.deadlineType}
+                                    </span>
+                                )}
                             </div>
 
                             <div className="bg-white p-6 rounded-2xl shadow-lg border-b-4 border-blue-400 flex flex-col items-center justify-center">
@@ -549,9 +601,14 @@ const ClientPortal = () => {
                                     <Activity size={32} />
                                 </div>
                                 <p className="text-gray-500 text-sm font-bold mb-1">目前專案階段</p>
-                                <span className="text-2xl font-black text-purple-700 mt-1">
-                                    {searchResult.projectInfo.status === 'permission' ? '許可申請中' :
-                                        searchResult.projectInfo.status === 'trial' ? '試車階段' : '設置階段'}
+                                <span className="text-xl font-black text-purple-700 mt-1 text-center">
+                                    {searchResult.projectInfo.status === 'setup' ? '🔧 設置階段' :
+                                        searchResult.projectInfo.status === 'planning' ? '📋 規劃階段' :
+                                            searchResult.projectInfo.status === 'permit-setup' ? '📝 設置許可申請中' :
+                                                searchResult.projectInfo.status === 'trial' ? '⚙️ 試車階段' :
+                                                    searchResult.projectInfo.status === 'permit-operate' ? '📄 操作許可申請中' :
+                                                        searchResult.projectInfo.status === 'operating' ? '🟢 營運中' :
+                                                            searchResult.projectInfo.status === 'renewal' ? '🔄 申請展延中' : '🔧 設置階段'}
                                 </span>
                             </div>
                         </div>
@@ -570,36 +627,114 @@ const ClientPortal = () => {
                             </div>
                         </div>
 
-                        {/* Recent Tasks */}
+
+                        {/* 專案動態 - 可折疊時間軸 */}
                         <div className="bg-white rounded-2xl shadow-lg p-6">
-                            <h3 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
-                                <FileText className="text-gray-500" />
-                                近期辦理進度
+                            <h3 className="text-xl font-bold text-gray-800 mb-6 flex items-center gap-2">
+                                <FileText className="text-blue-500" />
+                                專案最新動態
                             </h3>
-                            <div className="divide-y divide-gray-100">
-                                {searchResult.tasks.map((task) => (
-                                    <div key={task.id} className="py-4 flex items-center justify-between hover:bg-gray-50 rounded-lg px-2 transition">
-                                        <div className="flex items-center gap-4">
-                                            {task.status === 'done' ? (
-                                                <div className="bg-green-100 p-2 rounded-full">
-                                                    <CheckCircle className="text-green-600" size={24} />
-                                                </div>
-                                            ) : (
-                                                <div className="bg-blue-50 p-2 rounded-full">
-                                                    <div className="w-6 h-6 rounded-full border-4 border-blue-200 border-t-blue-600 animate-spin"></div>
-                                                </div>
-                                            )}
-                                            <div>
-                                                <p className="text-lg font-bold text-gray-800">{task.name}</p>
-                                                <p className="text-sm text-gray-500 font-medium">{task.date}</p>
-                                            </div>
-                                        </div>
-                                        <span className={`px-4 py-2 rounded-full text-sm font-bold ${task.status === 'done' ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'}`}>
-                                            {task.status === 'done' ? '已完成' : '進行中'}
-                                        </span>
-                                    </div>
-                                ))}
+
+                            {/* 狀態顏色說明 */}
+                            <div className="flex flex-wrap gap-3 mb-6 text-xs">
+                                <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-full bg-blue-500"></span> 進行中</span>
+                                <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-full bg-green-500"></span> 已完成</span>
+                                <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-full bg-yellow-500"></span> 待處理</span>
+                                <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-full bg-red-500"></span> 延遲</span>
                             </div>
+
+                            <div className="space-y-4">
+                                {/* 目前進度 - 藍色（進行中） */}
+                                <div className="flex gap-4">
+                                    <div className="flex flex-col items-center">
+                                        <div className="bg-blue-500 p-2 rounded-full shadow-lg z-10 ring-4 ring-blue-100">
+                                            <Activity className="text-white" size={20} />
+                                        </div>
+                                        <div className="w-0.5 h-full bg-gradient-to-b from-blue-300 to-teal-300 -mt-1"></div>
+                                    </div>
+                                    <div className="pb-4 flex-1">
+                                        <div className="flex items-center gap-2 mb-1">
+                                            <p className="text-sm font-bold text-blue-600">目前進度</p>
+                                            <span className="px-2 py-0.5 bg-blue-100 text-blue-700 text-xs rounded-full font-bold">進行中</span>
+                                        </div>
+                                        <p className="text-xl font-black text-gray-800 leading-tight">
+                                            {searchResult.currentProgress}
+                                        </p>
+                                        {searchResult.remarks && (
+                                            <span className="inline-block mt-2 px-2 py-0.5 bg-amber-50 text-amber-700 text-xs rounded font-bold border border-amber-200">
+                                                📝 {searchResult.remarks}
+                                            </span>
+                                        )}
+                                    </div>
+                                </div>
+
+                                {/* 下一步動作 - 黃色（待處理） */}
+                                <div className="flex gap-4">
+                                    <div className="flex flex-col items-center">
+                                        <div className="bg-yellow-500 p-2 rounded-full shadow-lg z-10 ring-4 ring-yellow-100">
+                                            <ArrowRight className="text-white" size={20} />
+                                        </div>
+                                        <div className="w-0.5 h-full bg-gradient-to-b from-yellow-300 to-gray-200 -mt-1"></div>
+                                    </div>
+                                    <div className="pb-4 flex-1">
+                                        <div className="flex items-center gap-2 mb-1">
+                                            <p className="text-sm font-bold text-yellow-600">下一步動作</p>
+                                            <span className="px-2 py-0.5 bg-yellow-100 text-yellow-700 text-xs rounded-full font-bold">待處理</span>
+                                        </div>
+                                        <p className="text-lg font-bold text-gray-700">
+                                            {searchResult.nextAction}
+                                        </p>
+                                        <p className="text-xs text-gray-400 mt-1 italic">* 傑太團隊正在為您全力推進中</p>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* 歷史記錄 - 可折疊 */}
+                            {searchResult.tasks && searchResult.tasks.length > 0 && (
+                                <div className="mt-6 pt-4 border-t border-gray-100">
+                                    <button
+                                        onClick={() => setHistoryExpanded(!historyExpanded)}
+                                        className="w-full flex items-center justify-between text-sm font-bold text-gray-500 hover:text-gray-700 transition py-2"
+                                    >
+                                        <span className="flex items-center gap-2">
+                                            <CheckCircle size={16} />
+                                            歷史辦理記錄 ({searchResult.tasks.length} 筆)
+                                        </span>
+                                        {historyExpanded ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
+                                    </button>
+
+                                    {historyExpanded && (
+                                        <div className="mt-4 space-y-3 animate-fade-in">
+                                            {searchResult.tasks.map((task) => (
+                                                <div key={task.id} className="flex gap-4 opacity-80 hover:opacity-100 transition">
+                                                    <div className="flex flex-col items-center">
+                                                        <div className={`p-1.5 rounded-full ${task.status === 'done' ? 'bg-green-500' : task.status === 'delayed' ? 'bg-red-500' : 'bg-gray-300'}`}>
+                                                            {task.status === 'done' ? (
+                                                                <CheckCircle className="text-white" size={14} />
+                                                            ) : (
+                                                                <Activity className="text-white" size={14} />
+                                                            )}
+                                                        </div>
+                                                        <div className="w-0.5 h-full bg-gray-200 -mt-1"></div>
+                                                    </div>
+                                                    <div className="pb-3 flex-1">
+                                                        <div className="flex items-center justify-between">
+                                                            <p className="text-sm font-medium text-gray-700">{task.name}</p>
+                                                            <span className={`px-2 py-0.5 text-xs rounded-full font-bold ${task.status === 'done' ? 'bg-green-100 text-green-700' :
+                                                                    task.status === 'delayed' ? 'bg-red-100 text-red-700' :
+                                                                        'bg-gray-100 text-gray-600'
+                                                                }`}>
+                                                                {task.status === 'done' ? '已完成' : task.status === 'delayed' ? '延遲' : '處理中'}
+                                                            </span>
+                                                        </div>
+                                                        <p className="text-xs text-gray-400">{task.date}</p>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
+                            )}
                         </div>
                     </div>
                 )}
@@ -730,7 +865,7 @@ const ClientPortal = () => {
                     </div>
                 )}
 
-                {activeTab === 'compliance' && <ComplianceView />}
+                {activeTab === 'compliance' && <ComplianceView client={searchResult} />}
                 {activeTab === 'library' && <RegulationLibraryView />}
 
                 {/* Footer */}

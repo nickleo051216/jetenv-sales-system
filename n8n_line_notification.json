@@ -1,0 +1,110 @@
+{
+  "name": "LINE_Permit_Expiry_Notification",
+  "nodes": [
+    {
+      "name": "每日 09:00 執行",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 9 * * *"
+            }
+          ]
+        }
+      },
+      "position": [250, 300]
+    },
+    {
+      "name": "查詢即將到期許可證",
+      "type": "n8n-nodes-base.supabase",
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "WITH expiring_permits AS (\n  SELECT wp.ban as uniformno, wp.fac_name, wp.per_no, wp.per_edate as expiry_date, 'water' as permit_type, '💧 水污許可' as permit_name FROM water_permits wp WHERE wp.per_edate BETWEEN CURRENT_DATE AND (CURRENT_DATE + INTERVAL '180 days')\n  UNION ALL\n  SELECT COALESCE(tp.unino, tp.ban) as uniformno, tp.fac_name, tp.per_no, tp.edate as expiry_date, 'toxic' as permit_type, '☢️ 毒化物許可' as permit_name FROM toxic_permits tp WHERE tp.edate BETWEEN CURRENT_DATE AND (CURRENT_DATE + INTERVAL '180 days')\n  UNION ALL\n  SELECT f.uniformno, f.facilityname as fac_name, NULL as per_no, f.airreleasedate as expiry_date, 'air' as permit_type, '💨 空污許可' as permit_name FROM factories f WHERE f.airreleasedate BETWEEN CURRENT_DATE AND (CURRENT_DATE + INTERVAL '180 days')\n  UNION ALL\n  SELECT f.uniformno, f.facilityname as fac_name, NULL as per_no, f.wastereleasedate as expiry_date, 'waste' as permit_type, '🗑️ 廢清書' as permit_name FROM factories f WHERE f.wastereleasedate BETWEEN CURRENT_DATE AND (CURRENT_DATE + INTERVAL '180 days')\n)\nSELECT lc.line_user_id, lc.line_display_name, ep.uniformno, ep.fac_name, ep.permit_type, ep.permit_name, ep.expiry_date, (ep.expiry_date - CURRENT_DATE) as days_until_expiry FROM expiring_permits ep INNER JOIN line_clients lc ON ep.uniformno = lc.uniformno WHERE lc.is_active = TRUE ORDER BY ep.expiry_date ASC;"
+      },
+      "position": [500, 300]
+    },
+    {
+      "name": "過濾有資料的結果",
+      "type": "n8n-nodes-base.filter",
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.line_user_id }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "isNotEmpty"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "position": [750, 300]
+    },
+    {
+      "name": "組合 LINE 訊息",
+      "type": "n8n-nodes-base.code",
+      "parameters": {
+        "jsCode": "// 組合 Flex Message\nconst items = $input.all();\nconst results = [];\n\nfor (const item of items) {\n  const data = item.json;\n  const days = data.days_until_expiry;\n  \n  // 根據天數決定緊急程度和顏色\n  let urgency, headerColor;\n  if (days <= 7) {\n    urgency = '🔴 緊急';\n    headerColor = '#FF0000';\n  } else if (days <= 30) {\n    urgency = '🟠 注意';\n    headerColor = '#FF8C00';\n  } else if (days <= 90) {\n    urgency = '🟡 提醒';\n    headerColor = '#FFD700';\n  } else {\n    urgency = '🟢 預告';\n    headerColor = '#4CAF50';\n  }\n  \n  const flexMessage = {\n    to: data.line_user_id,\n    messages: [\n      {\n        type: 'flex',\n        altText: `${urgency} ${data.permit_name} 將於 ${days} 天後到期`,\n        contents: {\n          type: 'bubble',\n          header: {\n            type: 'box',\n            layout: 'vertical',\n            contents: [\n              { type: 'text', text: `${urgency} 許可證到期提醒`, weight: 'bold', size: 'lg', color: '#FFFFFF' }\n            ],\n            backgroundColor: headerColor,\n            paddingAll: '15px'\n          },\n          body: {\n            type: 'box',\n            layout: 'vertical',\n            contents: [\n              { type: 'text', text: data.fac_name || '未知工廠', weight: 'bold', size: 'md', margin: 'md' },\n              { type: 'separator', margin: 'md' },\n              {\n                type: 'box',\n                layout: 'horizontal',\n                contents: [\n                  { type: 'text', text: '許可證類型', size: 'sm', color: '#888888', flex: 4 },\n                  { type: 'text', text: data.permit_name, size: 'sm', align: 'end', flex: 6 }\n                ],\n                margin: 'md'\n              },\n              {\n                type: 'box',\n                layout: 'horizontal',\n                contents: [\n                  { type: 'text', text: '到期日', size: 'sm', color: '#888888', flex: 4 },\n                  { type: 'text', text: data.expiry_date, size: 'sm', align: 'end', flex: 6, color: headerColor, weight: 'bold' }\n                ],\n                margin: 'sm'\n              },\n              {\n                type: 'box',\n                layout: 'horizontal',\n                contents: [\n                  { type: 'text', text: '剩餘天數', size: 'sm', color: '#888888', flex: 4 },\n                  { type: 'text', text: `${days} 天`, size: 'sm', align: 'end', flex: 6, weight: 'bold' }\n                ],\n                margin: 'sm'\n              }\n            ]\n          },\n          footer: {\n            type: 'box',\n            layout: 'vertical',\n            contents: [\n              {\n                type: 'button',\n                action: { type: 'uri', label: '聯繫傑太環境', uri: 'tel:0912345678' },\n                style: 'primary',\n                color: headerColor\n              }\n            ]\n          }\n        }\n      }\n    ]\n  };\n  \n  results.push({ json: flexMessage });\n}\n\nreturn results;"
+      },
+      "position": [1000, 300]
+    },
+    {
+      "name": "發送 LINE Push",
+      "type": "n8n-nodes-base.httpRequest",
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.line.me/v2/bot/message/push",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "to",
+              "value": "={{ $json.to }}"
+            },
+            {
+              "name": "messages",
+              "value": "={{ $json.messages }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "position": [1250, 300]
+    }
+  ],
+  "connections": {
+    "每日 09:00 執行": {
+      "main": [[{ "node": "查詢即將到期許可證", "type": "main", "index": 0 }]]
+    },
+    "查詢即將到期許可證": {
+      "main": [[{ "node": "過濾有資料的結果", "type": "main", "index": 0 }]]
+    },
+    "過濾有資料的結果": {
+      "main": [[{ "node": "組合 LINE 訊息", "type": "main", "index": 0 }]]
+    },
+    "組合 LINE 訊息": {
+      "main": [[{ "node": "發送 LINE Push", "type": "main", "index": 0 }]]
+    }
+  }
+}

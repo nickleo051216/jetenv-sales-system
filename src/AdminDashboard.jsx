@@ -3,6 +3,7 @@ import { initialClients, regulationsData } from './data/clients';
 import { useNavigate } from 'react-router-dom';
 import { FlowchartView, ComplianceView, RegulationLibraryView } from './SharedViews';
 import { supabase } from './supabaseClient';
+import CalendarSettingsModal from './components/CalendarSettingsModal';
 import {
   Calendar,
   FileText,
@@ -12,6 +13,7 @@ import {
   Clock,
   ChevronRight,
   ChevronDown,
+  ChevronUp,
   Droplets,
   Wind,
   Sprout,
@@ -30,7 +32,8 @@ import {
   Plus,
   Zap,
   Trash2,
-  Edit2
+  Edit2,
+  MapPin
 } from 'lucide-react';
 
 // --- Client List Data ---
@@ -83,27 +86,71 @@ const Navigation = ({ activeTab, setActiveTab, isMobile, setMenuOpen }) => {
 const ClientView = () => {
   const [clients, setClients] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
+  const [countyFilter, setCountyFilter] = useState(''); // 地區篩選
+  const [expandedCards, setExpandedCards] = useState({}); // 展開狀態
   const [loading, setLoading] = useState(true);
+  const [officers, setOfficers] = useState([]); // 傑太承辦人列表
 
   // Modal states
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [editingClient, setEditingClient] = useState(null); // 進度更新
   const [editInfoClient, setEditInfoClient] = useState(null); // 基本資料編輯
+  const [calendarSettingsClient, setCalendarSettingsClient] = useState(null); // 行事曆設定
   const [moeaData, setMoeaData] = useState(null); // 經濟部資料
   const [factoryData, setFactoryData] = useState(null); // 工廠資料（從 factories 表）
+  const [permitsData, setPermitsData] = useState(null); // 許可證資料（從環境部 API）
+  const [facilityOptions, setFacilityOptions] = useState([]); // 🆕 工廠選擇候選清單
+  const [showFacilitySelector, setShowFacilitySelector] = useState(false); // 🆕 顯示工廠選擇彈窗
+  const [pendingFormData, setPendingFormData] = useState(null); // 🆕 暫存的表單資料
+  const [pendingApiResults, setPendingApiResults] = useState(null); // 🆕 暫存的 API 結果
   const [newClientForm, setNewClientForm] = useState({
     name: '',
     taxId: '',
-    status: '規劃階段',
+    county: '', // 客戶所在地區
+    address: '', // 完整地址
+    phone: '', // 電話
+    status: '設置階段',
     nextAction: '',
     deadline: '',
     licenseTypes: [], // 空氣, 廢水, 廢棄物, 毒化, 土壤
-    industry: '' // 行業別
+    industry: '', // 行業別
+    currentProgress: '', // 目前進度
+    remarks: '', // 備註
+    officer_id: '', // 傑太承辦人
+    // 許可證到期日
+    airExpiry: '',
+    waterExpiry: '',
+    toxicExpiry: '',
+    wasteExpiry: ''
   });
 
-  // 從 Supabase 讀取客戶資料
+  // 🏷️ 設施類型判斷函數
+  const getFacilityType = (facilityName, source) => {
+    if (source === '經濟部登記') return { icon: '🏢', label: '公司' };
+    if (!facilityName) return { icon: '🏭', label: '工廠' };
+
+    const name = facilityName;
+    // 分公司
+    if (/分公司/.test(name)) return { icon: '🏬', label: '分公司' };
+    // 一廠、二廠、三廠...
+    const plantMatch = name.match(/([一二三四五六七八九十]+|\d+)廠/);
+    if (plantMatch) return { icon: '🏭', label: `${plantMatch[1]}廠` };
+    // 分廠
+    if (/分廠/.test(name)) return { icon: '🏭', label: '分廠' };
+    // 辦事處、辦公室
+    if (/辦事處|辦公室/.test(name)) return { icon: '🏢', label: '辦公室' };
+    // 倉庫
+    if (/倉庫/.test(name)) return { icon: '📦', label: '倉庫' };
+    // 總公司、總部
+    if (/總公司|總廠|總部/.test(name)) return { icon: '🏛️', label: '總部' };
+    // 預設
+    return { icon: '🏭', label: '工廠' };
+  };
+
+  // 從 Supabase 讀取客戶資料與承辦人列表
   useEffect(() => {
     fetchClients();
+    fetchOfficers();
   }, []);
 
   const fetchClients = async () => {
@@ -121,19 +168,33 @@ const ClientView = () => {
       if (error) throw error;
 
       // 將 Supabase 資料格式轉換為前端需要的格式
-      const formattedClients = data.map(client => ({
-        id: client.id,
-        name: client.name,
-        taxId: client.tax_id,
-        status: client.status,
-        phase: client.phase,
-        nextAction: client.next_action || '待確認',
-        deadline: client.deadline || '未設定',
-        type: client.licenses?.map(l => l.type.charAt(0).toUpperCase() + l.type.slice(1)) || ['Air'],
-        licenses: client.licenses || [],
-        officer: client.officer
-      }));
+      const formattedClients = data.map(client => {
+        // 🔍 Debug: 檢查 officer 資料
+        if (client.officer_id && !client.officer) {
+          console.warn(`⚠️ 客戶 "${client.name}" 有 officer_id (${client.officer_id}) 但 officer 資料為空`);
+        }
 
+        return {
+          id: client.id,
+          name: client.name,
+          taxId: client.tax_id,
+          county: client.county || '', // 客戶所在地區
+          address: client.address || '', // 完整地址
+          phone: client.phone || '', // 電話
+          status: client.status,
+          phase: client.phase,
+          currentProgress: client.current_progress || '待確認',
+          nextAction: client.next_action || '待確認',
+          remarks: client.remarks || '',
+          deadline: client.deadline || '未設定',
+          type: client.licenses?.map(l => l.type.charAt(0).toUpperCase() + l.type.slice(1)) || ['Air'],
+          licenses: client.licenses || [],
+          officer: client.officer,
+          officer_id: client.officer_id
+        };
+      });
+
+      console.log('📋 載入客戶資料完成，共', formattedClients.length, '筆');
       setClients(formattedClients);
     } catch (error) {
       console.error('讀取客戶資料失敗:', error);
@@ -141,6 +202,20 @@ const ClientView = () => {
       setClients(initialClients);
     } finally {
       setLoading(false);
+    }
+  };
+
+  // 載入承辦人列表
+  const fetchOfficers = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('officers')
+        .select('id, name, title, phone, avatar_color')
+        .order('name');
+      if (error) throw error;
+      if (data) setOfficers(data);
+    } catch (error) {
+      console.error('載入承辦人列表失敗:', error);
     }
   };
 
@@ -154,26 +229,29 @@ const ClientView = () => {
     try {
       setLoading(true);
 
-      // 同時查詢兩個 API：經濟部 + 工廠資料
-      const [moeaRes, factoryRes] = await Promise.all([
+      // 同時查詢三個 API：經濟部 + 工廠資料 + 許可證到期日
+      const [moeaRes, factoryRes, permitsRes] = await Promise.all([
         fetch(`/api/moea?taxId=${newClientForm.taxId}`),
-        fetch(`/api/factories?taxId=${newClientForm.taxId}`)
+        fetch(`/api/factories?taxId=${newClientForm.taxId}`),
+        fetch(`/api/permits?taxId=${newClientForm.taxId}`)  // 新增：許可證查詢
       ]);
 
       const moeaResult = await moeaRes.json();
       const factoryResult = await factoryRes.json();
+      const permitsResult = await permitsRes.json();
 
       console.log('🔍 MOEA 結果:', moeaResult);
       console.log('🏭 工廠結果:', factoryResult);
+      console.log('📄 許可證結果:', permitsResult);
 
-      // 如果兩個都查不到資料
-      if (!moeaResult.found && !factoryResult.found) {
+      // 如果三個都查不到資料
+      if (!moeaResult.found && !factoryResult.found && !permitsResult.found) {
         alert('❌ 找不到此統編資料，請確認是否輸入正確。');
         return;
       }
 
-      // 準備表單資料
-      let formData = { ...newClientForm };
+      // 準備表單資料（清空 name，讓 API 結果覆蓋）
+      let formData = { ...newClientForm, name: '' };  // 🔥 清空 name，讓自動帶入覆蓋
       let autoSelectedLicenses = [];
 
       // 1. 處理工廠資料（優先使用）
@@ -183,8 +261,37 @@ const ClientView = () => {
         // 如果有多個工廠，使用第一個（之後可以讓用戶選擇）
         const factoryInfo = Array.isArray(factory) ? factory[0] : factory;
 
-        formData.name = factoryInfo.facilityName || formData.name;
+        formData.name = factoryInfo.facilityName || '';
         formData.industry = factoryInfo.industryName || '';
+
+        // 🏠 自動帶入地址
+        if (factoryInfo.address) {
+          formData.address = factoryInfo.address;
+          console.log('🏠 自動帶入地址:', factoryInfo.address);
+
+          // 📍 從地址自動判斷「區」（如新莊區、土城區）
+          if (!formData.county) {
+            const districtMatch = factoryInfo.address.match(/[縣市](.{1,3}[區鄉鎮市])/);
+            if (districtMatch) {
+              formData.county = districtMatch[1];
+              console.log('📍 從地址自動判斷區:', formData.county);
+            } else if (factoryInfo.county) {
+              // 如果地址解析失敗，使用 factories 的 county
+              formData.county = factoryInfo.county;
+              console.log('📍 使用 factories 的地區:', factoryInfo.county);
+            }
+          }
+        } else if (factoryInfo.county) {
+          // 如果沒有地址，但有 county，直接使用
+          formData.county = factoryInfo.county;
+          console.log('📍 自動帶入地區:', factoryInfo.county);
+        }
+
+        // 📞 自動帶入電話
+        if (factoryInfo.phone) {
+          formData.phone = factoryInfo.phone;
+          console.log('📞 自動帶入電話:', factoryInfo.phone);
+        }
 
         // 🎯 自動勾選委託項目（根據工廠資料的 licenses）
         const licenses = factoryInfo.licenses || {};
@@ -264,11 +371,154 @@ const ClientView = () => {
       // 2. 處理經濟部資料（補充資訊）
       if (moeaResult.found) {
         const company = moeaResult.data;
-        // 如果工廠資料沒有提供公司名稱，使用經濟部資料
-        if (!formData.name) {
+        // 直接使用經濟部的公司名稱（如果工廠資料沒有的話）
+        if (!formData.name && company.name) {
           formData.name = company.name;
         }
+
+        // 🏠 從經濟部帶入地址（如果還沒有地址）
+        if (!formData.address && company.address) {
+          formData.address = company.address;
+          console.log('🏠 從經濟部帶入地址:', company.address);
+
+          // 📍 從地址自動判斷「區」（如新莊區、土城區）
+          if (!formData.county && company.address) {
+            // 嘗試從地址取得「XX區」（支援台灣各縣市的區名稱）
+            const districtMatch = company.address.match(/[縣市](.{1,3}[區鄉鎮市])/);
+            if (districtMatch) {
+              formData.county = districtMatch[1];
+              console.log('📍 從地址自動判斷區:', formData.county);
+            }
+          }
+        }
+
         setMoeaData(company); // 儲存完整經濟部資料
+      }
+
+      // 3. 處理許可證資料（環境部 API）
+      if (permitsResult.found) {
+        setPermitsData(permitsResult);
+
+        // 🔥 如果還沒有公司名稱，從 permits API 取得
+        if (!formData.name && permitsResult.summary?.facilityName) {
+          formData.name = permitsResult.summary.facilityName;
+          console.log('📋 從許可證 API 取得公司名稱:', formData.name);
+        }
+
+        // 🔥 如果查到水污許可,自動勾選「廢水」委託項目
+        if (permitsResult.water?.found && permitsResult.water.count > 0) {
+          if (!autoSelectedLicenses.includes('water')) {
+            autoSelectedLicenses.push('water');
+            console.log('💧 環境部 API 查到水污許可,自動勾選廢水');
+          }
+        }
+
+        // 🔥 如果有列管狀態,也自動勾選對應項目
+        if (permitsResult.summary) {
+          const s = permitsResult.summary;
+          if (s.isAirControlled && !autoSelectedLicenses.includes('air')) {
+            autoSelectedLicenses.push('air');
+            console.log('💨 列管狀態:空污列管,自動勾選空氣');
+          }
+          if (s.isWaterControlled && !autoSelectedLicenses.includes('water')) {
+            autoSelectedLicenses.push('water');
+            console.log('💧 列管狀態:水污列管,自動勾選廢水');
+          }
+          if (s.isWasteControlled && !autoSelectedLicenses.includes('waste')) {
+            autoSelectedLicenses.push('waste');
+            console.log('🗑️ 列管狀態:廢棄物列管,自動勾選廢棄物');
+          }
+          if (s.isToxicControlled && !autoSelectedLicenses.includes('toxic')) {
+            autoSelectedLicenses.push('toxic');
+            console.log('☢️ 列管狀態:毒化物列管,自動勾選毒化');
+          }
+          if (s.isSoilControlled && !autoSelectedLicenses.includes('soil')) {
+            autoSelectedLicenses.push('soil');
+            console.log('🌍 列管狀態:土壤列管,自動勾選土壤');
+          }
+        }
+
+        // 更新表單的委託項目
+        formData.licenseTypes = autoSelectedLicenses;
+
+        // 🏠 從許可證 API 帶入地址和地區
+        if (permitsResult.facilities && permitsResult.facilities.length > 0) {
+          // 收集所有不重複的地址選項（包含經濟部地址）
+          const addressOptions = [];
+          const seenAddresses = new Set();
+
+          // 加入經濟部地址（如果有）
+          if (moeaResult.found && moeaResult.data?.address) {
+            const moeaAddr = moeaResult.data.address;
+            if (!seenAddresses.has(moeaAddr)) {
+              seenAddresses.add(moeaAddr);
+              addressOptions.push({
+                source: '經濟部登記',
+                emsNo: '-',
+                facilityName: moeaResult.data.name || formData.name,
+                address: moeaAddr,
+                county: '', // 從地址解析
+                township: '',
+                isAirControlled: false,
+                isWaterControlled: false
+              });
+            }
+          }
+
+          // 加入環境部各設施地址（去重複）
+          permitsResult.facilities.forEach(f => {
+            if (f.address && !seenAddresses.has(f.address)) {
+              seenAddresses.add(f.address);
+              addressOptions.push({
+                source: '環境部設施',
+                ...f
+              });
+            }
+          });
+
+          console.log('📍 收集到的地址選項:', addressOptions);
+
+          // 🆕 如果有多個地址選項，顯示選擇彈窗讓用戶選擇
+          if (addressOptions.length > 1) {
+            console.log('📍 偵測到多個地址，顯示選擇器');
+            setFacilityOptions(addressOptions);
+            setPendingFormData(formData);
+            setPendingApiResults({ moeaResult, factoryResult, permitsResult, autoSelectedLicenses });
+            setShowFacilitySelector(true);
+            setLoading(false);
+            return; // 等待用戶選擇後再繼續
+          }
+
+          // 只有一個地址，直接使用
+          if (addressOptions.length === 1) {
+            const selectedFacility = addressOptions[0];
+            formData.address = selectedFacility.address;
+            formData.county = selectedFacility.township || selectedFacility.county || '';
+            if (!formData.county && selectedFacility.address) {
+              const match = selectedFacility.address.match(/[縣市](.{1,3}[區鄉鎮市])/);
+              if (match) formData.county = match[1];
+            }
+            console.log('🏠 自動帶入地址:', selectedFacility.address);
+          }
+        }
+
+        // 🔥 自動填入許可證到期日（清理可能的換行符號）
+        if (permitsResult.summary?.waterPermitEndDate) {
+          formData.waterExpiry = permitsResult.summary.waterPermitEndDate.replace(/[\r\n]/g, '');
+          console.log('📅 水污許可到期日:', formData.waterExpiry);
+        }
+        if (permitsResult.summary?.airPermitEndDate) {
+          formData.airExpiry = permitsResult.summary.airPermitEndDate.replace(/[\r\n]/g, '');
+          console.log('📅 空污許可到期日:', formData.airExpiry);
+        }
+        if (permitsResult.summary?.wastePermitEndDate) {
+          formData.wasteExpiry = permitsResult.summary.wastePermitEndDate.replace(/[\r\n]/g, '');
+          console.log('📅 廢棄物許可到期日:', formData.wasteExpiry);
+        }
+        if (permitsResult.summary?.toxicPermitEndDate) {
+          formData.toxicExpiry = permitsResult.summary.toxicPermitEndDate.replace(/[\r\n]/g, '');
+          console.log('📅 毒化物許可到期日:', formData.toxicExpiry);
+        }
       }
 
       // 更新表單
@@ -278,6 +528,7 @@ const ClientView = () => {
       const sources = [];
       if (moeaResult.found) sources.push('政府資料');
       if (factoryResult.found) sources.push('工廠登記');
+      if (permitsResult.found) sources.push('許可證資料');
 
       let message = `🎉 成功帶入${sources.join(' + ')}！`;
       if (autoSelectedLicenses.length > 0) {
@@ -295,6 +546,51 @@ const ClientView = () => {
         message += `\n📅 已自動設定期限：${formData.deadline}`;
       }
 
+      // 顯示許可證到期日
+      if (permitsResult.found && permitsResult.summary?.waterPermitEndDate) {
+        message += `\n💧 水污許可到期日：${permitsResult.summary.waterPermitEndDate}`;
+      }
+      if (permitsResult.found && permitsResult.summary?.airPermitEndDate) {
+        // 清理可能的換行符號
+        const airDate = permitsResult.summary.airPermitEndDate.replace(/[\r\n]/g, '');
+        const airDateRoc = permitsResult.summary.airPermitEndDateRoc?.replace(/[\r\n]/g, '') || '';
+        message += `\n💨 空污許可到期日：${airDate}${airDateRoc ? ` (${airDateRoc})` : ''}`;
+      }
+      if (permitsResult.found && permitsResult.summary?.toxicPermitEndDate) {
+        message += `\n☢️ 毒化物許可到期日：${permitsResult.summary.toxicPermitEndDate}`;
+      }
+
+      // 顯示列管狀態（含解列資訊）
+      if (permitsResult.found && permitsResult.summary?.controlNo) {
+        const s = permitsResult.summary;
+        const controlStatus = [];
+        const delistedStatus = [];
+
+        // 目前列管項目
+        if (s.isAirControlled) controlStatus.push('空');
+        if (s.isWaterControlled) controlStatus.push('水');
+        if (s.isWasteControlled) controlStatus.push('廢');
+        if (s.isToxicControlled) controlStatus.push('毒');
+
+        // 已解列項目（曾列管但現在已解列）
+        if (!s.isToxicControlled && s.toxicDelistDate) {
+          delistedStatus.push(`毒化(${s.toxicDelistDate}解列)`);
+        }
+        if (!s.isAirControlled && s.airDelistDate) {
+          delistedStatus.push(`空氣(${s.airDelistDate}解列)`);
+        }
+        if (!s.isWaterControlled && s.waterDelistDate) {
+          delistedStatus.push(`水(${s.waterDelistDate}解列)`);
+        }
+
+        if (controlStatus.length > 0) {
+          message += `\n🏭 列管狀態：${controlStatus.join('/')}列管 (${s.controlNo})`;
+        }
+        if (delistedStatus.length > 0) {
+          message += `\n📜 曾列管：${delistedStatus.join('、')}`;
+        }
+      }
+
       alert(message);
 
     } catch (err) {
@@ -303,6 +599,82 @@ const ClientView = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  // 🆕 處理用戶選擇設施後的邏輯
+  const handleFacilitySelect = (selectedFacility) => {
+    if (!pendingFormData || !pendingApiResults) {
+      console.error('沒有暫存的表單資料');
+      setShowFacilitySelector(false);
+      return;
+    }
+
+    const { moeaResult, factoryResult, permitsResult, autoSelectedLicenses } = pendingApiResults;
+    let formData = { ...pendingFormData };
+
+    // 帶入選擇的地址
+    formData.address = selectedFacility.address;
+    console.log('🏠 用戶選擇地址:', selectedFacility.address);
+
+    // 帶入地區
+    if (selectedFacility.township) {
+      formData.county = selectedFacility.township;
+    } else if (selectedFacility.county) {
+      formData.county = selectedFacility.county;
+    } else if (selectedFacility.address) {
+      const match = selectedFacility.address.match(/[縣市](.{1,3}[區鄉鎮市])/);
+      if (match) formData.county = match[1];
+    }
+    console.log('📍 用戶選擇地區:', formData.county);
+
+    // 繼續處理許可證到期日
+    if (permitsResult.summary?.waterPermitEndDate) {
+      formData.waterExpiry = permitsResult.summary.waterPermitEndDate.replace(/[\r\n]/g, '');
+    }
+    if (permitsResult.summary?.airPermitEndDate) {
+      formData.airExpiry = permitsResult.summary.airPermitEndDate.replace(/[\r\n]/g, '');
+    }
+    if (permitsResult.summary?.wastePermitEndDate) {
+      formData.wasteExpiry = permitsResult.summary.wastePermitEndDate.replace(/[\r\n]/g, '');
+    }
+    if (permitsResult.summary?.toxicPermitEndDate) {
+      formData.toxicExpiry = permitsResult.summary.toxicPermitEndDate.replace(/[\r\n]/g, '');
+    }
+
+    // 更新表單
+    setNewClientForm(formData);
+
+    // 清除暫存
+    setShowFacilitySelector(false);
+    setFacilityOptions([]);
+    setPendingFormData(null);
+    setPendingApiResults(null);
+
+    // 成功提示
+    const sources = [];
+    if (moeaResult.found) sources.push('政府資料');
+    if (factoryResult.found) sources.push('工廠登記');
+    if (permitsResult.found) sources.push('許可證資料');
+
+    let message = `🎉 成功帶入${sources.join(' + ')}！`;
+    message += `\n📍 已選擇：${selectedFacility.facilityName || selectedFacility.source}`;
+    message += `\n🏠 地址：${formData.address}`;
+
+    if (autoSelectedLicenses.length > 0) {
+      const licenseLabels = { air: '空氣', water: '廢水', waste: '廢棄物', toxic: '毒化', soil: '土壤' };
+      const selectedLabels = autoSelectedLicenses.map(l => licenseLabels[l]).join('、');
+      message += `\n已自動勾選委託項目：${selectedLabels}`;
+    }
+
+    if (permitsResult.summary?.airPermitEndDate) {
+      const airDate = permitsResult.summary.airPermitEndDate.replace(/[\r\n]/g, '');
+      message += `\n💨 空污許可到期日：${airDate}`;
+    }
+    if (permitsResult.summary?.waterPermitEndDate) {
+      message += `\n💧 水污許可到期日：${permitsResult.summary.waterPermitEndDate}`;
+    }
+
+    alert(message);
   };
 
   // 新增客戶
@@ -317,10 +689,16 @@ const ClientView = () => {
         .insert({
           tax_id: newClientForm.taxId,
           name: newClientForm.name,
+          county: newClientForm.county || null,
+          address: newClientForm.address || null, // 完整地址
+          phone: newClientForm.phone || null, // 電話
           status: newClientForm.status,
           phase: phaseMap[newClientForm.status] || 1,
+          current_progress: newClientForm.currentProgress,
+          remarks: newClientForm.remarks,
           next_action: newClientForm.nextAction,
-          deadline: newClientForm.deadline || null
+          deadline: newClientForm.deadline || null,
+          officer_id: newClientForm.officer_id || null
         })
         .select()
         .single();
@@ -329,13 +707,32 @@ const ClientView = () => {
 
       // 2. 如果有選取委託項目，新增到 licenses 表
       if (newClientForm.licenseTypes && newClientForm.licenseTypes.length > 0) {
-        const licensesToInsert = newClientForm.licenseTypes.map(type => ({
-          client_id: clientData.id,
-          type: type, // 'air', 'water', etc.
-          status: 'pending', // 預設狀態 (改為 pending 符合 schema)
-          name: `${type.toUpperCase()} 許可證`, // 給一個預設名稱
-          workflow_stage: '規劃階段'
-        }));
+        // 許可證到期日映射
+        const expiryMap = {
+          air: newClientForm.airExpiry,
+          water: newClientForm.waterExpiry || permitsData?.summary?.waterPermitEndDate,
+          toxic: newClientForm.toxicExpiry || permitsData?.summary?.toxicPermitEndDate,
+          waste: newClientForm.wasteExpiry
+        };
+
+        const licensesToInsert = newClientForm.licenseTypes.map(type => {
+          const license = {
+            client_id: clientData.id,
+            type: type, // 'air', 'water', etc.
+            status: 'pending', // 預設狀態
+            name: `${type.toUpperCase()} 許可證`,
+            workflow_stage: newClientForm.status
+          };
+
+          // 🔥 如果有到期日,存入 expiration_date
+          if (expiryMap[type]) {
+            license.expiration_date = expiryMap[type];
+            license.status = 'valid';  // 有到期日的設為有效
+            console.log(`📅 ${type} 許可到期日已存入:`, expiryMap[type]);
+          }
+
+          return license;
+        });
 
         const { error: licenseError } = await supabase
           .from('licenses')
@@ -349,14 +746,25 @@ const ClientView = () => {
       setNewClientForm({
         name: '',
         taxId: '',
-        status: '規劃階段',
+        county: '',
+        address: '', // 清空地址
+        phone: '', // 清空電話
+        status: '設置階段',
         nextAction: '',
         deadline: '',
         licenseTypes: [],
-        industry: ''
+        industry: '',
+        currentProgress: '',
+        remarks: '',
+        officer_id: '',
+        airExpiry: '',
+        waterExpiry: '',
+        toxicExpiry: '',
+        wasteExpiry: ''
       });
       setMoeaData(null); // 清除暫存的經濟部資料
       setFactoryData(null); // 清除暫存的工廠資料
+      setPermitsData(null); // 清除暫存的許可證資料
       fetchClients(); // 重新載入
     } catch (error) {
       console.error('新增客戶失敗:', error);
@@ -364,23 +772,92 @@ const ClientView = () => {
     }
   };
 
-  // 更新客戶
+  // 更新客戶 (合併版 - 支援進度、基本資料、許可證期限)
   const handleUpdateClient = async (e) => {
     e.preventDefault();
     try {
-      const phaseMap = { '規劃階段': 1, '試車階段': 2, '營運中': 3 };
+      // 階段對應 phase 數字：1-3 新設前期，4-5 試車申請，6 營運，7 展延
+      const phaseMap = {
+        '設置階段': 1,
+        '規劃階段': 2,
+        '設置許可申請中': 3,
+        '試車階段': 4,
+        '操作許可申請中': 5,
+        '營運中': 6,
+        '申請展延中': 7
+      };
 
-      const { error } = await supabase
+      // 1. 更新客戶基本資料
+      const { error: clientError } = await supabase
         .from('clients')
         .update({
+          name: editingClient.name,
+          tax_id: editingClient.taxId,
+          county: editingClient.county || null, // 地區
+          address: editingClient.address || null, // 地址
+          phone: editingClient.phone || null, // 電話
           status: editingClient.status,
           phase: phaseMap[editingClient.status] || editingClient.phase,
-          next_action: editingClient.nextAction,
-          deadline: editingClient.deadline || null
+          current_progress: editingClient.currentProgress || null,
+          next_action: editingClient.nextAction || null,
+          remarks: editingClient.remarks || null,
+          // 確保 deadline 是有效日期格式或 null
+          deadline: /^\d{4}-\d{2}-\d{2}$/.test(editingClient.deadline) ? editingClient.deadline : null,
+          officer_id: editingClient.officer_id || (editingClient.officer?.id) || null
         })
         .eq('id', editingClient.id);
 
-      if (error) throw error;
+      if (clientError) throw clientError;
+
+      // 2. 如果有編輯委託項目 (licenseTypes)，處理新增/刪除
+      if (editingClient.licenseTypes) {
+        const originalTypes = editingClient.licenses?.map(l => l.type.toLowerCase()) || [];
+        const newTypes = editingClient.licenseTypes.map(t => t.toLowerCase());
+
+        // 找出要新增的
+        const toAdd = newTypes.filter(t => !originalTypes.includes(t));
+        // 找出要刪除的
+        const toRemove = originalTypes.filter(t => !newTypes.includes(t));
+
+        // 新增
+        if (toAdd.length > 0) {
+          const licensesToInsert = toAdd.map(type => ({
+            client_id: editingClient.id,
+            type: type,
+            status: 'pending',
+            name: `${type.toUpperCase()} 許可證`,
+            workflow_stage: editingClient.status
+          }));
+          const { error: addError } = await supabase.from('licenses').insert(licensesToInsert);
+          if (addError) console.error('新增委託項目失敗:', addError);
+        }
+
+        // 刪除
+        if (toRemove.length > 0) {
+          const { error: removeError } = await supabase
+            .from('licenses')
+            .delete()
+            .eq('client_id', editingClient.id)
+            .in('type', toRemove);
+          if (removeError) console.error('刪除委託項目失敗:', removeError);
+        }
+      }
+
+      // 3. 更新許可證到期日
+      if (editingClient.licenses) {
+        for (const license of editingClient.licenses) {
+          if (license.id && license.expiration_date !== undefined) {
+            const { error: licenseError } = await supabase
+              .from('licenses')
+              .update({
+                expiration_date: license.expiration_date || null,
+                status: license.expiration_date ? 'valid' : license.status
+              })
+              .eq('id', license.id);
+            if (licenseError) console.error('更新許可證失敗:', licenseError);
+          }
+        }
+      }
 
       alert('✅ 客戶資料更新成功！');
       setEditingClient(null);
@@ -519,9 +996,12 @@ const ClientView = () => {
     }
   };
 
-  const filteredClients = clients.filter(c =>
-    c.name.includes(searchTerm) || c.status.includes(searchTerm)
-  );
+  // 篩選客戶：名稱搜尋 + 地區篩選
+  const filteredClients = clients.filter(c => {
+    const matchesSearch = c.name.includes(searchTerm) || c.status.includes(searchTerm);
+    const matchesCounty = !countyFilter || c.county === countyFilter;
+    return matchesSearch && matchesCounty;
+  });
 
   if (loading) {
     return (
@@ -539,17 +1019,32 @@ const ClientView = () => {
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h2 className="text-xl font-bold text-gray-800">客戶案件管理 (Clients)</h2>
-          <p className="text-sm text-gray-500">管理目前手上的案件進度與代辦事項。{clients.length > 0 && `（共 ${clients.length} 筆）`}</p>
+          <p className="text-sm text-gray-500">管理目前手上的案件進度與代辦事項。{clients.length > 0 && `（共 ${clients.length} 筆${countyFilter ? `，篩選 ${filteredClients.length} 筆` : ''}）`}</p>
         </div>
-        <div className="relative">
-          <Search className="w-4 h-4 absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
-          <input
-            type="text"
-            placeholder="搜尋客戶名稱..."
-            className="pl-9 pr-4 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 w-full md:w-64"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-          />
+        <div className="flex flex-col md:flex-row gap-2 md:gap-4">
+          {/* 地區篩選下拉選單 */}
+          <select
+            className="px-4 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white min-w-[140px]"
+            value={countyFilter}
+            onChange={(e) => setCountyFilter(e.target.value)}
+          >
+            <option value="">📍 所有地區</option>
+            {/* 動態從客戶資料取得所有地區（去重） */}
+            {[...new Set(clients.map(c => c.county).filter(Boolean))].sort().map(county => (
+              <option key={county} value={county}>{county}</option>
+            ))}
+          </select>
+          {/* 搜尋框 */}
+          <div className="relative">
+            <Search className="w-4 h-4 absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
+            <input
+              type="text"
+              placeholder="搜尋客戶名稱..."
+              className="pl-9 pr-4 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 w-full md:w-64"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+            />
+          </div>
         </div>
       </div>
 
@@ -591,14 +1086,146 @@ const ClientView = () => {
             </div>
 
             <div className="space-y-2 text-sm bg-gray-50 p-3 rounded-lg">
+              {/* 目前進度 */}
               <div className="flex justify-between text-gray-600">
-                <span>下一步:</span>
-                <span className="font-medium text-gray-900">{client.nextAction}</span>
+                <span className="flex items-center gap-1">
+                  <Activity className="w-3 h-3" />
+                  目前進度:
+                </span>
+                <span className="font-medium text-gray-900">{client.currentProgress}</span>
               </div>
+
+              {/* 下一步動作 */}
               <div className="flex justify-between text-gray-600">
-                <span>期限:</span>
+                <span className="flex items-center gap-1">
+                  <ChevronRight className="w-3 h-3" />
+                  下一步:
+                </span>
+                <span className="font-medium text-teal-700">{client.nextAction}</span>
+              </div>
+
+              {/* 備註 */}
+              {client.remarks && (
+                <div className="flex justify-between text-gray-600">
+                  <span className="flex items-center gap-1">
+                    <FileText className="w-3 h-3" />
+                    備註:
+                  </span>
+                  <span className="px-2 py-0.5 bg-amber-50 text-amber-700 rounded text-xs font-medium">
+                    {client.remarks}
+                  </span>
+                </div>
+              )}
+
+              {/* 期限 */}
+              <div className="flex justify-between text-gray-600 pt-2 border-t border-gray-200">
+                <span className="flex items-center gap-1">
+                  <Clock className="w-3 h-3" />
+                  期限:
+                </span>
                 <span className="font-bold text-red-600">{client.deadline}</span>
               </div>
+
+              {/* 傑太承辦人 */}
+              {client.officer && (
+                <div className="flex items-center gap-2 pt-2 border-t border-gray-200 mt-2">
+                  <div className={`w-6 h-6 rounded-full ${client.officer.avatar_color || 'bg-blue-500'} flex items-center justify-center text-white text-xs font-bold shadow-sm`}>
+                    {client.officer.name?.[0]}
+                  </div>
+                  <span className="text-sm font-medium text-gray-700">{client.officer.name}</span>
+                  <span className="text-xs text-gray-400">({client.officer.title || '承辦人'})</span>
+                </div>
+              )}
+
+              {/* 展開/收合按鈕 */}
+              {(client.address || client.phone || client.county || (client.licenses && client.licenses.length > 0)) && (
+                <button
+                  onClick={() => setExpandedCards(prev => ({ ...prev, [client.id]: !prev[client.id] }))}
+                  className="w-full mt-2 py-1.5 text-xs text-gray-500 hover:text-teal-600 hover:bg-teal-50 rounded transition-colors flex items-center justify-center gap-1"
+                >
+                  {expandedCards[client.id] ? (
+                    <><ChevronUp className="w-3 h-3" /> 收合詳細資訊</>
+                  ) : (
+                    <><ChevronDown className="w-3 h-3" /> 展開詳細資訊</>
+                  )}
+                </button>
+              )}
+
+              {/* 可展開的詳細資訊 */}
+              {expandedCards[client.id] && (
+                <div className="mt-2 pt-2 border-t border-gray-200 space-y-2 animate-fadeIn">
+                  {/* 地區 */}
+                  {client.county && (
+                    <div className="flex items-center gap-2 text-sm text-gray-600">
+                      <MapPin className="w-4 h-4 text-teal-500" />
+                      <span className="font-medium">{client.county}</span>
+                    </div>
+                  )}
+                  {/* 完整地址 */}
+                  {client.address && (
+                    <div className="flex items-start gap-2 text-sm text-gray-600">
+                      <MapPin className="w-4 h-4 text-gray-400 mt-0.5" />
+                      <span>{client.address}</span>
+                    </div>
+                  )}
+                  {/* 電話 */}
+                  {client.phone && (
+                    <div className="flex items-center gap-2 text-sm text-gray-600">
+                      <Phone className="w-4 h-4 text-gray-400" />
+                      <a href={`tel:${client.phone}`} className="hover:text-teal-600">{client.phone}</a>
+                    </div>
+                  )}
+                  {/* Google Maps 連結 */}
+                  {client.address && (
+                    <a
+                      href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(client.address)}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center gap-2 text-sm text-blue-600 hover:text-blue-800 bg-blue-50 px-3 py-2 rounded-lg hover:bg-blue-100 transition-colors"
+                    >
+                      <ExternalLink className="w-4 h-4" />
+                      🗺️ 開啟 Google Maps 導航
+                    </a>
+                  )}
+                  {/* 許可證期效 */}
+                  {client.licenses && client.licenses.length > 0 && (
+                    <div className="mt-2 pt-2 border-t border-gray-100">
+                      <div className="text-xs font-medium text-gray-500 mb-2">📋 許可證期效</div>
+                      <div className="space-y-1">
+                        {client.licenses.map((license, idx) => {
+                          const typeLabels = {
+                            air: '💨 空氣',
+                            water: '💧 廢水',
+                            waste: '🗑️ 廢棄物',
+                            toxic: '☢️ 毒化',
+                            soil: '🌍 土壤'
+                          };
+                          const isExpired = license.expiration_date && new Date(license.expiration_date) < new Date();
+                          const isNearExpiry = license.expiration_date &&
+                            new Date(license.expiration_date) < new Date(Date.now() + 90 * 24 * 60 * 60 * 1000) &&
+                            !isExpired;
+
+                          return (
+                            <div key={idx} className="flex justify-between items-center text-sm">
+                              <span className="text-gray-600">
+                                {typeLabels[license.type.toLowerCase()] || license.type}
+                              </span>
+                              <span className={`font-medium ${isExpired ? 'text-red-600' :
+                                isNearExpiry ? 'text-amber-600' :
+                                  'text-gray-700'
+                                }`}>
+                                {license.expiration_date || '未設定'}
+                                {isExpired && ' ⚠️ 已逾期'}
+                                {isNearExpiry && ' ⏰ 將到期'}
+                              </span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
 
             <div className="flex gap-2 mt-4">
@@ -606,14 +1233,14 @@ const ClientView = () => {
                 onClick={() => setEditingClient(client)}
                 className="flex-1 py-2 text-sm text-teal-600 font-medium border border-teal-200 rounded hover:bg-teal-50 transition-colors"
               >
-                更新進度 →
+                編輯 →
               </button>
               <button
-                onClick={() => setEditInfoClient({ ...client, licenseTypes: client.licenses.map(l => l.type) })}
-                className="px-3 py-2 text-sm text-blue-600 border border-blue-200 rounded hover:bg-blue-50 transition-colors"
-                title="編輯客戶資料"
+                onClick={() => setCalendarSettingsClient(client)}
+                className="px-3 py-2 text-sm text-purple-500 border border-purple-200 rounded hover:bg-purple-50 transition-colors"
+                title="行事曆設定"
               >
-                <Edit2 className="w-4 h-4" />
+                <Calendar className="w-4 h-4" />
               </button>
               <button
                 onClick={() => handleDeleteClient(client.id, client.name)}
@@ -637,6 +1264,91 @@ const ClientView = () => {
           <span className="font-medium">新增案件</span>
         </button>
       </div>
+
+      {/* 🆕 地址選擇彈窗 */}
+      {showFacilitySelector && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-[60] p-4" onClick={() => setShowFacilitySelector(false)}>
+          <div className="bg-white rounded-xl shadow-xl max-w-lg w-full max-h-[80vh] overflow-hidden" onClick={e => e.stopPropagation()}>
+            <div className="p-4 border-b border-gray-200 bg-gradient-to-r from-teal-500 to-cyan-500">
+              <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                <MapPin className="w-5 h-5" />
+                選擇設施地址
+              </h3>
+              <p className="text-sm text-white/80 mt-1">此統編有多個地址，請選擇要使用的地址</p>
+            </div>
+
+            <div className="p-4 overflow-y-auto max-h-[60vh] space-y-2">
+              {facilityOptions.map((facility, idx) => {
+                const typeInfo = getFacilityType(facility.facilityName, facility.source);
+                const isControlled = facility.isAirControlled || facility.isWaterControlled;
+
+                return (
+                  <button
+                    key={idx}
+                    onClick={() => handleFacilitySelect(facility)}
+                    className={`w-full text-left p-4 rounded-lg border-2 transition-all hover:border-teal-400 hover:bg-teal-50 ${isControlled ? 'border-teal-200 bg-teal-50/50' : 'border-gray-200 bg-white'
+                      }`}
+                  >
+                    <div className="flex items-start gap-3">
+                      {/* 類型圖示 */}
+                      <div className={`w-10 h-10 rounded-full flex items-center justify-center text-xl ${facility.source === '經濟部登記' ? 'bg-blue-100' : 'bg-green-100'
+                        }`}>
+                        {typeInfo.icon}
+                      </div>
+
+                      <div className="flex-1 min-w-0">
+                        {/* 類型標籤 + 設施名稱 */}
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className={`px-2 py-0.5 rounded text-xs font-medium ${facility.source === '經濟部登記'
+                            ? 'bg-blue-100 text-blue-700'
+                            : 'bg-green-100 text-green-700'
+                            }`}>
+                            {typeInfo.label}
+                          </span>
+                          {isControlled && (
+                            <span className="px-2 py-0.5 rounded text-xs font-medium bg-orange-100 text-orange-700">
+                              {facility.isAirControlled && '空污列管'}
+                              {facility.isAirControlled && facility.isWaterControlled && ' + '}
+                              {facility.isWaterControlled && '水污列管'}
+                            </span>
+                          )}
+                        </div>
+
+                        {/* 設施名稱 */}
+                        <div className="font-medium text-gray-900 mt-1 truncate">
+                          {facility.facilityName || '未命名設施'}
+                        </div>
+
+                        {/* 地址 */}
+                        <div className="text-sm text-gray-500 mt-1 flex items-start gap-1">
+                          <MapPin className="w-3 h-3 mt-1 flex-shrink-0" />
+                          <span>{facility.address}</span>
+                        </div>
+
+                        {/* 管編 */}
+                        {facility.emsNo && facility.emsNo !== '-' && (
+                          <div className="text-xs text-gray-400 mt-1">
+                            管編：{facility.emsNo}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+
+            <div className="p-4 border-t border-gray-200 bg-gray-50">
+              <button
+                onClick={() => setShowFacilitySelector(false)}
+                className="w-full py-2 px-4 text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-100 transition"
+              >
+                取消
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* 新增客戶 Modal */}
       {isAddModalOpen && (
@@ -761,11 +1473,110 @@ const ClientView = () => {
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">目前階段</label>
                 <select className="w-full border rounded-lg p-2" value={newClientForm.status} onChange={e => setNewClientForm({ ...newClientForm, status: e.target.value })}>
-                  <option value="規劃階段">規劃階段</option>
-                  <option value="試車階段">試車階段</option>
-                  <option value="營運中">營運中</option>
+                  <option value="設置階段">1️⃣ 設置階段</option>
+                  <option value="規劃階段">2️⃣ 規劃階段</option>
+                  <option value="設置許可申請中">3️⃣ 設置許可/水措申請中</option>
+                  <option value="試車階段">4️⃣ 試車階段</option>
+                  <option value="操作許可申請中">5️⃣ 操作許可申請中</option>
+                  <option value="營運中">6️⃣ 營運中</option>
+                  <option value="申請展延中">7️⃣ 申請展延中</option>
                 </select>
               </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  📍 客戶所在地區
+                </label>
+                <input
+                  type="text"
+                  className="w-full border rounded-lg p-2"
+                  value={newClientForm.county}
+                  onChange={e => setNewClientForm({ ...newClientForm, county: e.target.value })}
+                  placeholder="例如：台北市、新北市"
+                  list="county-suggestions"
+                />
+                {/* 提供常用地區建議 */}
+                <datalist id="county-suggestions">
+                  <option value="台北市" />
+                  <option value="新北市" />
+                  <option value="桃園市" />
+                </datalist>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  🏠 完整地址
+                </label>
+                <input
+                  type="text"
+                  className="w-full border rounded-lg p-2"
+                  value={newClientForm.address}
+                  onChange={e => setNewClientForm({ ...newClientForm, address: e.target.value })}
+                  placeholder="例如：新北市土城區中央路三段XXX號"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  📞 聯絡電話
+                </label>
+                <input
+                  type="text"
+                  className="w-full border rounded-lg p-2"
+                  value={newClientForm.phone}
+                  onChange={e => setNewClientForm({ ...newClientForm, phone: e.target.value })}
+                  placeholder="例如：02-1234-5678"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <Activity className="w-3 h-3 inline mr-1" />
+                  目前進度
+                </label>
+                <input
+                  type="text"
+                  className="w-full border rounded-lg p-2"
+                  value={newClientForm.currentProgress}
+                  onChange={e => setNewClientForm({ ...newClientForm, currentProgress: e.target.value })}
+                  placeholder="例如：聯繫中、已送件"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <FileText className="w-3 h-3 inline mr-1" />
+                  備註
+                </label>
+                <select
+                  className="w-full border rounded-lg p-2"
+                  value={newClientForm.remarks}
+                  onChange={e => setNewClientForm({ ...newClientForm, remarks: e.target.value })}
+                >
+                  <option value="">無</option>
+                  <option value="可拜訪">可拜訪</option>
+                  <option value="查無資料">查無資料</option>
+                  <option value="剛換發">剛換發</option>
+                  <option value="自行申報">自行申報</option>
+                  <option value="待觀察">待觀察</option>
+                  <option value="自己人">自己人</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  👤 傑太承辦人
+                </label>
+                <select
+                  className="w-full border rounded-lg p-2"
+                  value={newClientForm.officer_id}
+                  onChange={e => setNewClientForm({ ...newClientForm, officer_id: e.target.value })}
+                >
+                  <option value="">選擇承辦人</option>
+                  {officers.map(o => (
+                    <option key={o.id} value={o.id}>
+                      {o.name} ({o.title || '承辦人'})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">委託項目 (可多選)</label>
                 <div className="flex flex-wrap gap-2">
@@ -805,6 +1616,50 @@ const ClientView = () => {
                 <label className="block text-sm font-medium text-gray-700 mb-1">期限</label>
                 <input type="date" className="w-full border rounded-lg p-2" value={newClientForm.deadline} onChange={e => setNewClientForm({ ...newClientForm, deadline: e.target.value })} />
               </div>
+
+              {/* 許可證到期日輸入區塊 */}
+              {newClientForm.licenseTypes?.length > 0 && (
+                <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 space-y-3">
+                  <label className="block text-sm font-bold text-amber-800">
+                    📅 許可證到期日（選填，營運中/展延案件請填寫）
+                  </label>
+                  <div className="grid grid-cols-2 gap-3">
+                    {newClientForm.licenseTypes.includes('air') && (
+                      <div>
+                        <label className="text-xs text-gray-600 font-medium">💨 空污許可</label>
+                        <input type="date" className="w-full border rounded p-2 text-sm"
+                          value={newClientForm.airExpiry || ''}
+                          onChange={e => setNewClientForm({ ...newClientForm, airExpiry: e.target.value })} />
+                      </div>
+                    )}
+                    {newClientForm.licenseTypes.includes('water') && (
+                      <div>
+                        <label className="text-xs text-gray-600 font-medium">💧 水污許可</label>
+                        <input type="date" className="w-full border rounded p-2 text-sm"
+                          value={newClientForm.waterExpiry || ''}
+                          onChange={e => setNewClientForm({ ...newClientForm, waterExpiry: e.target.value })} />
+                      </div>
+                    )}
+                    {newClientForm.licenseTypes.includes('toxic') && (
+                      <div>
+                        <label className="text-xs text-gray-600 font-medium">☢️ 毒化物許可</label>
+                        <input type="date" className="w-full border rounded p-2 text-sm"
+                          value={newClientForm.toxicExpiry || ''}
+                          onChange={e => setNewClientForm({ ...newClientForm, toxicExpiry: e.target.value })} />
+                      </div>
+                    )}
+                    {newClientForm.licenseTypes.includes('waste') && (
+                      <div>
+                        <label className="text-xs text-gray-600 font-medium">🗑️ 廢清書展延</label>
+                        <input type="date" className="w-full border rounded p-2 text-sm"
+                          value={newClientForm.wasteExpiry || ''}
+                          onChange={e => setNewClientForm({ ...newClientForm, wasteExpiry: e.target.value })} />
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
               <button type="submit" className="w-full bg-teal-600 text-white py-3 rounded-lg font-bold hover:bg-teal-700 transition mt-4">
                 建立案件
               </button>
@@ -813,115 +1668,292 @@ const ClientView = () => {
         </div>
       )}
 
-      {/* 編輯客戶 Modal */}
-      {/* 編輯客戶 Modal (更新進度) */}
+      {/* 合併版編輯客戶 Modal */}
       {editingClient && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4" onClick={() => setEditingClient(null)}>
-          <div className="bg-white rounded-2xl p-6 max-w-md w-full shadow-2xl" onClick={e => e.stopPropagation()}>
+          <div className="bg-white rounded-2xl p-6 max-w-lg w-full shadow-2xl max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+            {/* Header */}
             <div className="flex justify-between items-start mb-4">
               <div>
-                <div className="flex items-center gap-2">
-                  <h3 className="font-bold text-lg text-gray-800">{editingClient.name}</h3>
-                  <button
-                    onClick={() => setEditInfoClient({ ...editingClient, licenseTypes: editingClient.licenses.map(l => l.type) })}
-                    className="text-gray-400 hover:text-blue-500 transition-colors p-1"
-                    title="編輯基本資料"
-                  >
-                    <Edit2 className="w-4 h-4" />
-                  </button>
-                </div>
-                <div className="flex items-center text-sm text-gray-500 mt-1">
-                  <span className="font-mono bg-gray-100 px-2 py-0.5 rounded text-xs mr-2">{editingClient.taxId}</span>
-                </div>
+                <h3 className="font-bold text-xl text-gray-800">{editingClient.name}</h3>
+                <span className="font-mono bg-gray-100 px-2 py-0.5 rounded text-xs text-gray-500">{editingClient.taxId}</span>
               </div>
               <button onClick={() => setEditingClient(null)} className="text-gray-400 hover:text-gray-600">
                 <X className="w-5 h-5" />
               </button>
             </div>
-            <form onSubmit={handleUpdateClient} className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">變更階段</label>
-                <select className="w-full border rounded-lg p-2" value={editingClient.status} onChange={e => setEditingClient({ ...editingClient, status: e.target.value })}>
-                  <option value="規劃階段">規劃階段</option>
-                  <option value="試車階段">試車階段</option>
-                  <option value="營運中">營運中</option>
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">下一步動作</label>
-                <input type="text" className="w-full border rounded-lg p-2" value={editingClient.nextAction} onChange={e => setEditingClient({ ...editingClient, nextAction: e.target.value })} />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">截止期限</label>
-                <input type="date" className="w-full border rounded-lg p-2" value={editingClient.deadline} onChange={e => setEditingClient({ ...editingClient, deadline: e.target.value })} />
-              </div>
-              <div className="pt-4 border-t border-gray-100 flex gap-2">
-                <button type="button" onClick={() => setEditingClient(null)} className="flex-1 bg-gray-100 text-gray-600 py-3 rounded-lg font-bold hover:bg-gray-200 transition">
-                  取消
-                </button>
-                <button type="submit" className="flex-1 bg-blue-600 text-white py-3 rounded-lg font-bold hover:bg-blue-700 transition flex items-center justify-center gap-2">
-                  <Save className="w-4 h-4" /> 儲存變更
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
 
-      {/* 編輯客戶基本資料 Modal */}
-      {editInfoClient && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4" onClick={() => setEditInfoClient(null)}>
-          <div className="bg-white rounded-2xl p-6 max-w-md w-full shadow-2xl" onClick={e => e.stopPropagation()}>
-            <div className="flex justify-between items-center mb-6">
-              <h3 className="text-xl font-bold text-gray-800">✏️ 編輯基本資料</h3>
-              <button onClick={() => setEditInfoClient(null)} className="text-gray-400 hover:text-gray-600">
-                <X className="w-5 h-5" />
+            {/* Tab 切換 */}
+            <div className="flex border-b border-gray-200 mb-4">
+              <button
+                type="button"
+                onClick={() => setEditingClient({ ...editingClient, _tab: 'progress' })}
+                className={`px-4 py-2 text-sm font-medium border-b-2 transition ${(editingClient._tab || 'progress') === 'progress'
+                  ? 'border-teal-500 text-teal-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700'
+                  }`}
+              >
+                📋 進度更新
+              </button>
+              <button
+                type="button"
+                onClick={() => setEditingClient({ ...editingClient, _tab: 'info' })}
+                className={`px-4 py-2 text-sm font-medium border-b-2 transition ${editingClient._tab === 'info'
+                  ? 'border-teal-500 text-teal-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700'
+                  }`}
+              >
+                ✏️ 基本資料
+              </button>
+              <button
+                type="button"
+                onClick={() => setEditingClient({ ...editingClient, _tab: 'licenses' })}
+                className={`px-4 py-2 text-sm font-medium border-b-2 transition ${editingClient._tab === 'licenses'
+                  ? 'border-teal-500 text-teal-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700'
+                  }`}
+              >
+                📅 許可證期限
               </button>
             </div>
-            <form onSubmit={handleUpdateClientInfo} className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">公司名稱</label>
-                <input required type="text" className="w-full border rounded-lg p-2" value={editInfoClient.name} onChange={e => setEditInfoClient({ ...editInfoClient, name: e.target.value })} />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">統一編號</label>
-                <input required type="text" className="w-full border rounded-lg p-2 font-mono" value={editInfoClient.taxId} onChange={e => setEditInfoClient({ ...editInfoClient, taxId: e.target.value })} maxLength={8} />
-              </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">委託項目 (可多選)</label>
-                <div className="flex flex-wrap gap-2">
-                  {[
-                    { key: 'air', label: '💨 空氣', color: 'purple' },
-                    { key: 'water', label: '💧 廢水', color: 'blue' },
-                    { key: 'waste', label: '🗑️ 廢棄物', color: 'amber' },
-                    { key: 'toxic', label: '☢️ 毒化', color: 'red' },
-                    { key: 'soil', label: '🌍 土壤', color: 'green' }
-                  ].map(item => (
-                    <button
-                      key={item.key}
-                      type="button"
-                      onClick={() => {
-                        const types = editInfoClient.licenseTypes || [];
-                        if (types.includes(item.key)) {
-                          setEditInfoClient({ ...editInfoClient, licenseTypes: types.filter(t => t !== item.key) });
-                        } else {
-                          setEditInfoClient({ ...editInfoClient, licenseTypes: [...types, item.key] });
-                        }
-                      }}
-                      className={`px-3 py-1.5 text-xs rounded-full border transition ${(editInfoClient.licenseTypes || []).includes(item.key)
-                        ? `bg-${item.color}-100 text-${item.color}-700 border-${item.color}-300 ring-2 ring-${item.color}-200`
-                        : 'bg-gray-50 text-gray-500 border-gray-200 hover:bg-gray-100'
-                        }`}
+            <form onSubmit={handleUpdateClient} className="space-y-4">
+              {/* Tab 1: 進度更新 */}
+              {(editingClient._tab || 'progress') === 'progress' && (
+                <>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">專案階段</label>
+                    <select className="w-full border rounded-lg p-2" value={editingClient.status} onChange={e => setEditingClient({ ...editingClient, status: e.target.value })}>
+                      <option value="設置階段">1️⃣ 設置階段</option>
+                      <option value="規劃階段">2️⃣ 規劃階段</option>
+                      <option value="設置許可申請中">3️⃣ 設置許可/水措申請中</option>
+                      <option value="試車階段">4️⃣ 試車階段</option>
+                      <option value="操作許可申請中">5️⃣ 操作許可申請中</option>
+                      <option value="營運中">6️⃣ 營運中</option>
+                      <option value="申請展延中">7️⃣ 申請展延中</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      📍 客戶所在地區
+                    </label>
+                    <input
+                      type="text"
+                      className="w-full border rounded-lg p-2"
+                      value={editingClient.county || ''}
+                      onChange={e => setEditingClient({ ...editingClient, county: e.target.value })}
+                      placeholder="例如：土城區、新莊區"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      🏠 完整地址
+                    </label>
+                    <input
+                      type="text"
+                      className="w-full border rounded-lg p-2"
+                      value={editingClient.address || ''}
+                      onChange={e => setEditingClient({ ...editingClient, address: e.target.value })}
+                      placeholder="例如：新北市土城區中央路三段XXX號"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      📞 聯絡電話
+                    </label>
+                    <input
+                      type="text"
+                      className="w-full border rounded-lg p-2"
+                      value={editingClient.phone || ''}
+                      onChange={e => setEditingClient({ ...editingClient, phone: e.target.value })}
+                      placeholder="例如：02-1234-5678"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      <Activity className="w-3 h-3 inline mr-1" />
+                      目前進度
+                    </label>
+                    <input
+                      type="text"
+                      className="w-full border rounded-lg p-2"
+                      value={editingClient.currentProgress || ''}
+                      onChange={e => setEditingClient({ ...editingClient, currentProgress: e.target.value })}
+                      placeholder="例如：mail出去了、已有業務行動"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      <ChevronRight className="w-3 h-3 inline mr-1" />
+                      下一步動作
+                    </label>
+                    <input
+                      type="text"
+                      className="w-full border rounded-lg p-2"
+                      value={editingClient.nextAction || ''}
+                      onChange={e => setEditingClient({ ...editingClient, nextAction: e.target.value })}
+                      placeholder="例如：待回覆、上白"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      <FileText className="w-3 h-3 inline mr-1" />
+                      備註
+                    </label>
+                    <select
+                      className="w-full border rounded-lg p-2"
+                      value={editingClient.remarks || ''}
+                      onChange={e => setEditingClient({ ...editingClient, remarks: e.target.value })}
                     >
-                      {item.label}
-                    </button>
-                  ))}
+                      <option value="">無</option>
+                      <option value="可拜訪">可拜訪</option>
+                      <option value="查無資料">查無資料</option>
+                      <option value="剛換發">剛換發</option>
+                      <option value="自行申報">自行申報</option>
+                      <option value="待觀察">待觀察</option>
+                      <option value="自己人">自己人</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      <Clock className="w-3 h-3 inline mr-1" />
+                      截止期限
+                    </label>
+                    <input type="date" className="w-full border rounded-lg p-2" value={editingClient.deadline || ''} onChange={e => setEditingClient({ ...editingClient, deadline: e.target.value })} />
+                  </div>
+                </>
+              )}
+
+              {/* Tab 2: 基本資料 */}
+              {editingClient._tab === 'info' && (
+                <>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">公司名稱</label>
+                    <input required type="text" className="w-full border rounded-lg p-2" value={editingClient.name} onChange={e => setEditingClient({ ...editingClient, name: e.target.value })} />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">統一編號</label>
+                    <input required type="text" className="w-full border rounded-lg p-2 font-mono" value={editingClient.taxId} onChange={e => setEditingClient({ ...editingClient, taxId: e.target.value })} maxLength={8} />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      👤 傑太承辦人
+                    </label>
+                    <select
+                      className="w-full border rounded-lg p-2"
+                      value={editingClient.officer_id || editingClient.officer?.id || ''}
+                      onChange={e => setEditingClient({ ...editingClient, officer_id: e.target.value })}
+                    >
+                      <option value="">選擇承辦人</option>
+                      {officers.map(o => (
+                        <option key={o.id} value={o.id}>
+                          {o.name} ({o.title || '承辦人'})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">委託項目 (可多選)</label>
+                    <div className="flex flex-wrap gap-2">
+                      {[
+                        { key: 'air', label: '💨 空氣', color: 'purple' },
+                        { key: 'water', label: '💧 廢水', color: 'blue' },
+                        { key: 'waste', label: '🗑️ 廢棄物', color: 'amber' },
+                        { key: 'toxic', label: '☢️ 毒化', color: 'red' },
+                        { key: 'soil', label: '🌍 土壤', color: 'green' }
+                      ].map(item => {
+                        const licenseTypes = editingClient.licenseTypes || editingClient.licenses?.map(l => l.type.toLowerCase()) || [];
+                        const isSelected = licenseTypes.includes(item.key);
+                        return (
+                          <button
+                            key={item.key}
+                            type="button"
+                            onClick={() => {
+                              const types = [...licenseTypes];
+                              if (isSelected) {
+                                setEditingClient({ ...editingClient, licenseTypes: types.filter(t => t !== item.key) });
+                              } else {
+                                setEditingClient({ ...editingClient, licenseTypes: [...types, item.key] });
+                              }
+                            }}
+                            className={`px-3 py-1.5 text-xs rounded-full border transition ${isSelected
+                              ? `bg-${item.color}-100 text-${item.color}-700 border-${item.color}-300 ring-2 ring-${item.color}-200`
+                              : 'bg-gray-50 text-gray-500 border-gray-200 hover:bg-gray-100'
+                              }`}
+                          >
+                            {item.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </>
+              )}
+
+              {/* Tab 3: 許可證期限 */}
+              {editingClient._tab === 'licenses' && (
+                <div className="space-y-4">
+                  <p className="text-sm text-gray-500 bg-amber-50 p-3 rounded-lg border border-amber-200">
+                    📅 編輯每個許可證的到期日。到期日會影響客戶端顯示的「最近許可到期日」。
+                  </p>
+
+                  {editingClient.licenses?.length > 0 ? (
+                    editingClient.licenses.map((license, idx) => {
+                      const typeLabels = {
+                        air: { icon: '💨', name: '空污許可' },
+                        water: { icon: '💧', name: '水污許可' },
+                        waste: { icon: '🗑️', name: '廢清書' },
+                        toxic: { icon: '☢️', name: '毒化物許可' },
+                        soil: { icon: '🌍', name: '土壤' }
+                      };
+                      const typeInfo = typeLabels[license.type.toLowerCase()] || { icon: '📄', name: license.type };
+
+                      return (
+                        <div key={license.id || idx} className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
+                          <span className="text-2xl">{typeInfo.icon}</span>
+                          <div className="flex-1">
+                            <p className="text-sm font-medium text-gray-700">{typeInfo.name}</p>
+                            <input
+                              type="date"
+                              className="w-full border rounded p-2 text-sm mt-1"
+                              value={license.expiration_date || ''}
+                              onChange={e => {
+                                const updatedLicenses = [...editingClient.licenses];
+                                updatedLicenses[idx] = { ...license, expiration_date: e.target.value };
+                                setEditingClient({ ...editingClient, licenses: updatedLicenses });
+                              }}
+                            />
+                          </div>
+                          <div className="text-right">
+                            <span className={`text-xs px-2 py-1 rounded ${license.status === 'valid' ? 'bg-green-100 text-green-700' :
+                              license.status === 'pending' ? 'bg-yellow-100 text-yellow-700' :
+                                'bg-gray-100 text-gray-600'
+                              }`}>
+                              {license.status === 'valid' ? '有效' : license.status === 'pending' ? '待確認' : license.status}
+                            </span>
+                          </div>
+                        </div>
+                      );
+                    })
+                  ) : (
+                    <div className="text-center text-gray-400 py-8">
+                      尚未設定委託項目
+                    </div>
+                  )}
                 </div>
-              </div>
+              )}
 
               <div className="pt-4 border-t border-gray-100 flex gap-2">
-                <button type="button" onClick={() => setEditInfoClient(null)} className="flex-1 bg-gray-100 text-gray-600 py-3 rounded-lg font-bold hover:bg-gray-200 transition">
+                <button type="button" onClick={() => setEditingClient(null)} className="flex-1 bg-gray-100 text-gray-600 py-3 rounded-lg font-bold hover:bg-gray-200 transition">
                   取消
                 </button>
                 <button type="submit" className="flex-1 bg-teal-600 text-white py-3 rounded-lg font-bold hover:bg-teal-700 transition flex items-center justify-center gap-2">
@@ -931,6 +1963,15 @@ const ClientView = () => {
             </form>
           </div>
         </div>
+      )}
+
+      {/* 行事曆設定 Modal */}
+      {calendarSettingsClient && (
+        <CalendarSettingsModal
+          client={calendarSettingsClient}
+          onClose={() => setCalendarSettingsClient(null)}
+          onSave={() => fetchClients()}
+        />
       )}
     </div>
   );
