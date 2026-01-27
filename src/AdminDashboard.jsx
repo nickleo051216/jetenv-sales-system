@@ -199,39 +199,59 @@ const ClientView = () => {
         // 📅 自動設定期限（根據換證年份）
         if (factoryInfo.renewalYear) {
           try {
-            // 解析換證年份格式：117.02, 11702, 116.11, 11610 等
-            const renewalYear = factoryInfo.renewalYear.toString();
-            let rocYear, month;
+            // 解析換證年份格式：2026/08/07, 117.02, 11702, 116.11, 11610 等
+            const renewalStr = factoryInfo.renewalYear.toString().trim();
+            // 處理常見分隔符號 / . -
+            const parts = renewalStr.split(/[\/\.\-]/);
 
-            if (renewalYear.includes('.')) {
-              // 格式：117.02 或 116.11
-              const parts = renewalYear.split('.');
-              rocYear = parseInt(parts[0]);
+            let year, month, day;
+
+            if (parts.length >= 2) {
+              // 有分隔符號的情況: 2026/08/07 or 117.02
+              year = parseInt(parts[0]);
               month = parseInt(parts[1]);
+              day = parts[2] ? parseInt(parts[2]) : null;
             } else {
-              // 格式：11702 或 11610
-              if (renewalYear.length === 5) {
-                rocYear = parseInt(renewalYear.substring(0, 3));
-                month = parseInt(renewalYear.substring(3));
-              } else if (renewalYear.length === 4) {
-                rocYear = parseInt(renewalYear.substring(0, 2));
-                month = parseInt(renewalYear.substring(2));
+              // 無分隔符號的情況: 11702, 20260807
+              if (renewalStr.length === 5) {
+                year = parseInt(renewalStr.substring(0, 3));
+                month = parseInt(renewalStr.substring(3));
+              } else if (renewalStr.length === 4) {
+                year = parseInt(renewalStr.substring(0, 2));
+                month = parseInt(renewalStr.substring(2));
+              } else if (renewalStr.length === 8) { // 20260807
+                year = parseInt(renewalStr.substring(0, 4));
+                month = parseInt(renewalStr.substring(4, 6));
+                day = parseInt(renewalStr.substring(6, 8));
               }
             }
 
-            // 驗證月份有效性
-            if (rocYear && month && month >= 1 && month <= 12) {
-              // 轉換為西元年
-              const adYear = rocYear + 1911;
+            // 廢棄物特別處理：如果只有廢棄物許可，或者包含廢棄物，這裡做一個特殊判斷
+            // 根據需求：廢棄物的部分 不用列期限 保持 "正常有效" 就好
+            // 這裡我們判斷：如果 *只有* 廢棄物，期限設為空；如果有其他許可，先以其他的期限為主
+            const isOnlyWaste = autoSelectedLicenses.length === 1 && autoSelectedLicenses[0] === 'waste';
 
-              // 計算該月最後一天
-              const lastDay = new Date(adYear, month, 0).getDate();
+            if (isOnlyWaste) {
+              formData.deadline = ""; // 清空期限
+              console.log('🗑️ 廢棄物許可：無須展延，不設定期限');
+            } else if (year && month && month >= 1 && month <= 12) {
+              // 📅 日期邏輯修正 (Bug fix: 3937年問題)
+              // 如果年份大於 1911，視為西元年 (AD)，否則視為民國年 (ROC) 並 +1911
+              const adYear = year > 1911 ? year : year + 1911;
+
+              // 如果沒有指定日期，則設定為該月最後一天
+              let lastDay;
+              if (day) {
+                lastDay = day;
+              } else {
+                lastDay = new Date(adYear, month, 0).getDate();
+              }
 
               // 格式化為 YYYY-MM-DD
               const deadline = `${adYear}-${String(month).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
               formData.deadline = deadline;
 
-              console.log(`📅 換證年份 ${renewalYear} → 期限 ${deadline}`);
+              console.log(`📅 換證年份 ${renewalStr} → 解析年份 ${year} → 期限 ${deadline}`);
             }
           } catch (err) {
             console.warn('⚠️ 換證年份解析失敗:', err);
