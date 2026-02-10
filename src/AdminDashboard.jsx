@@ -33,7 +33,8 @@ import {
   Zap,
   Trash2,
   Edit2,
-  MapPin
+  MapPin,
+  ArrowUp
 } from 'lucide-react';
 
 // --- Client List Data ---
@@ -89,6 +90,7 @@ const ClientView = () => {
   const [countyFilter, setCountyFilter] = useState(''); // 地區篩選
   const [expandedCards, setExpandedCards] = useState({}); // 展開狀態
   const [loading, setLoading] = useState(true);
+  const [showScrollTop, setShowScrollTop] = useState(false); // 顯示回到頂端按鈕
   const [officers, setOfficers] = useState([]); // 傑太承辦人列表
 
   // Modal states
@@ -151,7 +153,20 @@ const ClientView = () => {
   useEffect(() => {
     fetchClients();
     fetchOfficers();
+
+    // 監聽滾動事件，控制「回到頂端」按鈕顯示
+    const handleScroll = () => {
+      setShowScrollTop(window.scrollY > 300);
+    };
+
+    window.addEventListener('scroll', handleScroll);
+    return () => window.removeEventListener('scroll', handleScroll);
   }, []);
+
+  // 回到頂端函數
+  const scrollToTop = () => {
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
 
   const fetchClients = async () => {
     try {
@@ -1025,6 +1040,14 @@ const ClientView = () => {
               onChange={(e) => setSearchTerm(e.target.value)}
             />
           </div>
+          {/* 新增客戶按鈕（頂端） */}
+          <button
+            onClick={() => setIsAddModalOpen(true)}
+            className="px-4 py-2 bg-teal-600 text-white rounded-lg font-medium hover:bg-teal-700 transition-colors flex items-center gap-2 justify-center whitespace-nowrap"
+          >
+            <Plus className="w-4 h-4" />
+            新增客戶
+          </button>
         </div>
       </div>
 
@@ -1952,6 +1975,17 @@ const ClientView = () => {
           onClose={() => setCalendarSettingsClient(null)}
           onSave={() => fetchClients()}
         />
+      )}
+
+      {/* 回到頂端浮動按鈕 */}
+      {showScrollTop && (
+        <button
+          onClick={scrollToTop}
+          className="fixed bottom-6 right-6 z-50 bg-teal-600 text-white p-3 rounded-full shadow-lg hover:bg-teal-700 transition-all transform hover:scale-110 group"
+          title="回到頂端"
+        >
+          <ArrowUp className="w-5 h-5" />
+        </button>
       )}
     </div>
   );
