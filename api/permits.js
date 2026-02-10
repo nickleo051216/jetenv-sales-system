@@ -343,27 +343,21 @@ export default async function handler(req, res) {
                 if (!airError && airPermits && airPermits.length > 0) {
                     console.log('✅ 找到空污許可:', airPermits.length, '筆');
 
-                    // 民國年轉西元年的函數（強化版）
                     const convertToWesternDate = (rocDate) => {
                         if (!rocDate) return null;
+                        // 格式可能是 "114/05/12" 或 "114-05-12" 或 "2026-05-12"
                         const str = String(rocDate).trim();
+                        // 已經是 ISO 格式 (YYYY-MM-DD)
+                        if (/^\d{4}-\d{2}-\d{2}$/.test(str)) return str;
 
-                        // 1. 如果已經是 YYYY-MM-DD 且年份 > 1911，直接回傳
-                        if (/^\d{4}-\d{2}-\d{2}$/.test(str)) {
-                            const year = parseInt(str.split('-')[0]);
-                            if (year > 1911) return str;
-                        }
-
-                        // 格式可能是 "114/05/12" 或 "114-05-12"
                         const parts = str.replace(/-/g, '/').split('/');
                         if (parts.length === 3) {
                             let year = parseInt(parts[0]);
-
-                            // 關鍵修正：如果年份 > 1911，假設已經是西元年，不加 1911
-                            if (year < 1000) {
+                            // 修正：只有當年份小於 1911 (民國年) 才加 1911
+                            // 如果是 2026，這裡如果不判斷會變成 3937
+                            if (year < 1911) {
                                 year += 1911;
                             }
-
                             const month = parts[1].padStart(2, '0');
                             const day = parts[2].padStart(2, '0');
                             return `${year}-${month}-${day}`;
@@ -433,31 +427,17 @@ export default async function handler(req, res) {
                 if (!airUniError && airByUniformno && airByUniformno.length > 0) {
                     console.log('✅ 用統編直接找到空污許可:', airByUniformno.length, '筆');
 
-                    // 民國年轉西元年（強化版）
+                    // 民國年轉西元年
                     const convertMinguoToWestern = (rocDate) => {
                         if (!rocDate) return null;
                         const str = String(rocDate).trim();
-
-                        // 1. 如果已經是 YYYY-MM-DD 且年份 > 1911，直接回傳
-                        // 例如: "2025-12-31"
-                        if (/^\d{4}-\d{2}-\d{2}$/.test(str)) {
-                            const year = parseInt(str.split('-')[0]);
-                            if (year > 1911) return str;
-                        }
-
-                        // 2. 處理各種分隔符號 (-, /)
+                        // 已經是 ISO 格式
+                        if (/^\d{4}-\d{2}-\d{2}$/.test(str)) return str;
+                        // 民國年格式
                         const parts = str.replace(/-/g, '/').split('/');
-
                         if (parts.length === 3) {
                             let year = parseInt(parts[0]);
-
-                            // 關鍵修正：如果年份 > 1911，假設已經是西元年，不加 1911
-                            // 如果年份 < 1000 (例如 114, 115)，才當作民國年加 1911
-                            // 為什麼用 1000？因為民國 1000 年是西元 2911 年，非常安全
-                            if (year < 1000) {
-                                year += 1911;
-                            }
-
+                            if (year < 1911) year += 1911;
                             return `${year}-${parts[1].padStart(2, '0')}-${parts[2].padStart(2, '0')}`;
                         }
                         return null;
