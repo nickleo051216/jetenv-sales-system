@@ -1,0 +1,363 @@
+{
+    "name": "同步空水許可 (修正版)",
+    "nodes": [
+        {
+            "parameters": {
+                "httpMethod": "POST",
+                "path": "sync-air-permits",
+                "responseMode": "responseNode",
+                "options": {}
+            },
+            "id": "52b948a0-5a7b-4965-b572-b6a476654452",
+            "name": "Webhook",
+            "type": "n8n-nodes-base.webhook",
+            "typeVersion": 2,
+            "position": [
+                -800,
+                300
+            ],
+            "webhookId": "sync-air-permits"
+        },
+        {
+            "parameters": {
+                "jsCode": "// 從 Webhook body 取得資料\nconst body = $input.first().json.body;\nconst airRecords = body.airRecords || [];\nconst waterRecords = body.waterRecords || [];\nconst sheetName = body.sheetName || 'Unknown';\n\nconsole.log(`📥 收到資料，來自工作表：${sheetName}`);\nconsole.log(`   空污：${airRecords.length} 筆`);\nconsole.log(`   水污：${waterRecords.length} 筆`);\n\n// 日期轉換：把各種格式轉成 \"115/10/17\" 民國格式\nfunction convertToMinguo(dateStr) {\n  if (!dateStr) return '';\n  const str = String(dateStr).trim();\n  \n  // 格式1: 0119-10-17T15:54:00.000Z (ISO with ROC year prefix)\n  const isoMatch = str.match(/^0?(\\d{2,3})-(\\d{2})-(\\d{2})/);\n  if (isoMatch) {\n    const year = isoMatch[1].replace(/^0+/, '');\n    return `${year}/${isoMatch[2]}/${isoMatch[3]}`;\n  }\n  \n  // 格式2: 119/10/17 或 0119/10/17\n  const rocMatch = str.match(/^0?(\\d{2,3})\\/(\\d{1,2})\\/(\\d{1,2})/);\n  if (rocMatch) {\n    const year = rocMatch[1].replace(/^0+/, '');\n    return `${year}/${rocMatch[2].padStart(2,'0')}/${rocMatch[3].padStart(2,'0')}`;\n  }\n  \n  // 格式3: 2026-10-17 (西元 ISO)\n  const westMatch = str.match(/^(\\d{4})-(\\d{2})-(\\d{2})/);\n  if (westMatch) {\n    const rocYear = parseInt(westMatch[1]) - 1911;\n    return `${rocYear}/${westMatch[2]}/${westMatch[3]}`;\n  }\n  \n  return str; // 回傳原始值\n}\n\n// 準備輸出：分別處理空污和水污\nconst output = [];\n\n// 處理空污\nairRecords.forEach(r => {\n  output.push({\n    type: 'air',\n    ems_no: r.ems_no || '',\n    county: r.county || '',\n    company_name: r.company_name || '',\n    address: r.address || '',\n    category: r.category || '操作',\n    expiry_date: convertToMinguo(r.expiry_date),\n    uniformno: r.uniformno || ''\n  });\n});\n\n// 處理水污\nwaterRecords.forEach(r => {\n  output.push({\n    type: 'water',\n    ems_no: r.ems_no || '',\n    fac_name: r.fac_name || '',\n    address: r.address || '',\n    per_edate: convertToMinguo(r.per_edate),\n    ban: r.ban || ''\n  });\n});\n\nif (output.length === 0) {\n  throw new Error('沒有收到任何資料');\n}\n\nreturn output.map(item => ({ json: item }));"
+            },
+            "id": "parse-data-node",
+            "name": "解析並轉換資料",
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 2,
+            "position": [
+                -560,
+                300
+            ]
+        },
+        {
+            "parameters": {
+                "rules": {
+                    "values": [
+                        {
+                            "conditions": {
+                                "options": {
+                                    "caseSensitive": true,
+                                    "leftValue": "",
+                                    "typeValidation": "strict",
+                                    "version": 3
+                                },
+                                "conditions": [
+                                    {
+                                        "id": "air-condition",
+                                        "leftValue": "={{ $json.type }}",
+                                        "rightValue": "air",
+                                        "operator": {
+                                            "type": "string",
+                                            "operation": "equals"
+                                        }
+                                    }
+                                ],
+                                "combinator": "and"
+                            },
+                            "renameOutput": true,
+                            "outputKey": "空污"
+                        },
+                        {
+                            "conditions": {
+                                "options": {
+                                    "caseSensitive": true,
+                                    "leftValue": "",
+                                    "typeValidation": "strict",
+                                    "version": 3
+                                },
+                                "conditions": [
+                                    {
+                                        "id": "water-condition",
+                                        "leftValue": "={{ $json.type }}",
+                                        "rightValue": "water",
+                                        "operator": {
+                                            "type": "string",
+                                            "operation": "equals"
+                                        }
+                                    }
+                                ],
+                                "combinator": "and"
+                            },
+                            "renameOutput": true,
+                            "outputKey": "水污"
+                        }
+                    ]
+                },
+                "options": {}
+            },
+            "type": "n8n-nodes-base.switch",
+            "typeVersion": 3.4,
+            "position": [
+                -320,
+                300
+            ],
+            "id": "switch-air-water",
+            "name": "分流空污/水污"
+        },
+        {
+            "parameters": {
+                "operation": "upsert",
+                "tableId": "air_permits",
+                "fieldsUi": {
+                    "fieldValues": [
+                        {
+                            "fieldId": "ems_no",
+                            "fieldValue": "={{ $json.ems_no }}"
+                        },
+                        {
+                            "fieldId": "county",
+                            "fieldValue": "={{ $json.county }}"
+                        },
+                        {
+                            "fieldId": "company_name",
+                            "fieldValue": "={{ $json.company_name }}"
+                        },
+                        {
+                            "fieldId": "address",
+                            "fieldValue": "={{ $json.address }}"
+                        },
+                        {
+                            "fieldId": "category",
+                            "fieldValue": "={{ $json.category }}"
+                        },
+                        {
+                            "fieldId": "expiry_date",
+                            "fieldValue": "={{ $json.expiry_date }}"
+                        },
+                        {
+                            "fieldId": "uniformno",
+                            "fieldValue": "={{ $json.uniformno }}"
+                        }
+                    ]
+                },
+                "conflictFields": [
+                    "ems_no"
+                ]
+            },
+            "id": "upsert-air",
+            "name": "Upsert 空污",
+            "type": "n8n-nodes-base.supabase",
+            "typeVersion": 1,
+            "position": [
+                -80,
+                180
+            ],
+            "credentials": {
+                "supabaseApi": {
+                    "id": "RnsK9FrQBnMRc38T",
+                    "name": "nickleo051216 jet"
+                }
+            }
+        },
+        {
+            "parameters": {
+                "operation": "upsert",
+                "tableId": "water_permits",
+                "fieldsUi": {
+                    "fieldValues": [
+                        {
+                            "fieldId": "ems_no",
+                            "fieldValue": "={{ $json.ems_no }}"
+                        },
+                        {
+                            "fieldId": "fac_name",
+                            "fieldValue": "={{ $json.fac_name }}"
+                        },
+                        {
+                            "fieldId": "address",
+                            "fieldValue": "={{ $json.address }}"
+                        },
+                        {
+                            "fieldId": "per_edate",
+                            "fieldValue": "={{ $json.per_edate }}"
+                        },
+                        {
+                            "fieldId": "ban",
+                            "fieldValue": "={{ $json.ban }}"
+                        }
+                    ]
+                },
+                "conflictFields": [
+                    "ems_no"
+                ]
+            },
+            "id": "upsert-water",
+            "name": "Upsert 水污",
+            "type": "n8n-nodes-base.supabase",
+            "typeVersion": 1,
+            "position": [
+                -80,
+                420
+            ],
+            "credentials": {
+                "supabaseApi": {
+                    "id": "RnsK9FrQBnMRc38T",
+                    "name": "nickleo051216 jet"
+                }
+            }
+        },
+        {
+            "parameters": {
+                "jsCode": "// 統計空污結果\nconst items = $input.all();\nconst successCount = items.filter(i => !i.json.error).length;\nconst errorCount = items.filter(i => i.json.error).length;\n\nreturn [{\n  json: {\n    type: 'air',\n    success: successCount,\n    error: errorCount\n  }\n}];"
+            },
+            "id": "count-air",
+            "name": "統計空污",
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 2,
+            "position": [
+                160,
+                180
+            ]
+        },
+        {
+            "parameters": {
+                "jsCode": "// 統計水污結果\nconst items = $input.all();\nconst successCount = items.filter(i => !i.json.error).length;\nconst errorCount = items.filter(i => i.json.error).length;\n\nreturn [{\n  json: {\n    type: 'water',\n    success: successCount,\n    error: errorCount\n  }\n}];"
+            },
+            "id": "count-water",
+            "name": "統計水污",
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 2,
+            "position": [
+                160,
+                420
+            ]
+        },
+        {
+            "parameters": {
+                "jsCode": "// 合併統計結果\nconst items = $input.all();\nlet airSuccess = 0, airError = 0;\nlet waterSuccess = 0, waterError = 0;\n\nitems.forEach(item => {\n  if (item.json.type === 'air') {\n    airSuccess = item.json.success || 0;\n    airError = item.json.error || 0;\n  } else if (item.json.type === 'water') {\n    waterSuccess = item.json.success || 0;\n    waterError = item.json.error || 0;\n  }\n});\n\nreturn [{\n  json: {\n    success: true,\n    message: `✅ 同步完成！`,\n    air: { success: airSuccess, error: airError },\n    water: { success: waterSuccess, error: waterError },\n    total: airSuccess + waterSuccess,\n    timestamp: new Date().toISOString()\n  }\n}];"
+            },
+            "id": "merge-result",
+            "name": "合併結果",
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 2,
+            "position": [
+                400,
+                300
+            ]
+        },
+        {
+            "parameters": {
+                "respondWith": "json",
+                "responseBody": "={{ $json }}",
+                "options": {}
+            },
+            "id": "respond-success",
+            "name": "回應成功",
+            "type": "n8n-nodes-base.respondToWebhook",
+            "typeVersion": 1.1,
+            "position": [
+                640,
+                300
+            ]
+        }
+    ],
+    "connections": {
+        "Webhook": {
+            "main": [
+                [
+                    {
+                        "node": "解析並轉換資料",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "解析並轉換資料": {
+            "main": [
+                [
+                    {
+                        "node": "分流空污/水污",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "分流空污/水污": {
+            "main": [
+                [
+                    {
+                        "node": "Upsert 空污",
+                        "type": "main",
+                        "index": 0
+                    }
+                ],
+                [
+                    {
+                        "node": "Upsert 水污",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Upsert 空污": {
+            "main": [
+                [
+                    {
+                        "node": "統計空污",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Upsert 水污": {
+            "main": [
+                [
+                    {
+                        "node": "統計水污",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "統計空污": {
+            "main": [
+                [
+                    {
+                        "node": "合併結果",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "統計水污": {
+            "main": [
+                [
+                    {
+                        "node": "合併結果",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "合併結果": {
+            "main": [
+                [
+                    {
+                        "node": "回應成功",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        }
+    },
+    "active": false,
+    "settings": {
+        "executionOrder": "v1"
+    },
+    "versionId": "fixed-v1",
+    "meta": {
+        "templateCredsSetupCompleted": true
+    },
+    "id": "sync-air-water-fixed",
+    "tags": []
+}

@@ -22,3 +22,14 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Archive (old temp/debug files)
+_archive/
+scripts/_archive/
+
+# Agent / AI tool cache
+.agent/
+.claude/
+
+# Data backups
+data/backup/

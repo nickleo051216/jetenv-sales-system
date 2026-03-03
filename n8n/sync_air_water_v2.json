@@ -1,0 +1,422 @@
+{
+    "name": "同步空水許可到Supabase",
+    "nodes": [
+        {
+            "parameters": {
+                "httpMethod": "POST",
+                "path": "sync-air-permits",
+                "responseMode": "responseNode",
+                "options": {}
+            },
+            "id": "52b948a0-5a7b-4965-b572-b6a476654452",
+            "name": "webhook1",
+            "type": "n8n-nodes-base.webhook",
+            "typeVersion": 2,
+            "position": [
+                -1760,
+                32
+            ],
+            "webhookId": "sync-air-permits"
+        },
+        {
+            "parameters": {
+                "fieldToSplitOut": "=body.airRecords",
+                "options": {}
+            },
+            "type": "n8n-nodes-base.splitOut",
+            "typeVersion": 1,
+            "position": [
+                -1504,
+                -16
+            ],
+            "id": "8548d74d-0a99-40cc-93f8-fde1fc122cbc",
+            "name": "拆出空"
+        },
+        {
+            "parameters": {
+                "fieldToSplitOut": "body.waterRecords",
+                "options": {}
+            },
+            "type": "n8n-nodes-base.splitOut",
+            "typeVersion": 1,
+            "position": [
+                -1504,
+                160
+            ],
+            "id": "357b07cd-48ac-4bde-8475-96c4a4b717ac",
+            "name": "拆出水"
+        },
+        {
+            "parameters": {
+                "jsCode": "// Split Out 後，每個 item 已經是單筆 record\nconst items = $input.all();\n\n// 民國日期轉 ISO 西元格式\nfunction convertToISO(dateStr) {\n  if (!dateStr) return null;\n  const str = String(dateStr).trim();\n  \n  // 格式1: 0119-10-17T15:54:00.000Z\n  const isoMatch = str.match(/^0?(\\d{2,3})-(\\d{2})-(\\d{2})/);\n  if (isoMatch) {\n    const rocYear = parseInt(isoMatch[1]);\n    const westYear = rocYear + 1911;\n    return `${westYear}-${isoMatch[2]}-${isoMatch[3]}`;\n  }\n  \n  // 格式2: 117/02/29\n  const rocMatch = str.match(/^0?(\\d{2,3})\\/(\\d{1,2})\\/(\\d{1,2})/);\n  if (rocMatch) {\n    const rocYear = parseInt(rocMatch[1]);\n    const westYear = rocYear + 1911;\n    const mm = rocMatch[2].padStart(2, '0');\n    const dd = rocMatch[3].padStart(2, '0');\n    return `${westYear}-${mm}-${dd}`;\n  }\n  \n  // 格式3: 已經是 2028-02-29\n  const westMatch = str.match(/^(\\d{4})-(\\d{2})-(\\d{2})/);\n  if (westMatch) return str;\n  \n  return null;\n}\n\nreturn items.map(item => {\n  const r = item.json;\n  return {\n    json: {\n      ems_no: r.ems_no || '',\n      county: r.county || '',\n      company_name: r.company_name || '',\n      address: r.address || '',\n      category: r.category || '操作',\n      expiry_date: convertToISO(r.expiry_date),\n      uniformno: r.uniformno || ''\n    }\n  };\n});"
+            },
+            "id": "d662513f-5a05-49fe-828b-915f407cd0c9",
+            "name": "格式轉換2",
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 2,
+            "position": [
+                -960,
+                -96
+            ]
+        },
+        {
+            "parameters": {
+                "jsCode": "// Split Out 後，每個 item 已經是單筆 record\nconst items = $input.all();\n\n// 民國日期轉 ISO 西元格式\nfunction convertToISO(dateStr) {\n  if (!dateStr) return null;\n  const str = String(dateStr).trim();\n  \n  // 格式1: 0119-10-17T15:54:00.000Z\n  const isoMatch = str.match(/^0?(\\d{2,3})-(\\d{2})-(\\d{2})/);\n  if (isoMatch) {\n    const rocYear = parseInt(isoMatch[1]);\n    const westYear = rocYear + 1911;\n    return `${westYear}-${isoMatch[2]}-${isoMatch[3]}`;\n  }\n  \n  // 格式2: 117/02/29\n  const rocMatch = str.match(/^0?(\\d{2,3})\\/(\\d{1,2})\\/(\\d{1,2})/);\n  if (rocMatch) {\n    const rocYear = parseInt(rocMatch[1]);\n    const westYear = rocYear + 1911;\n    const mm = rocMatch[2].padStart(2, '0');\n    const dd = rocMatch[3].padStart(2, '0');\n    return `${westYear}-${mm}-${dd}`;\n  }\n  \n  // 格式3: 已經是 2028-02-29\n  const westMatch = str.match(/^(\\d{4})-(\\d{2})-(\\d{2})/);\n  if (westMatch) return str;\n  \n  return null;\n}\n\nreturn items.map(item => {\n  const r = item.json;\n  return {\n    json: {\n      ems_no: r.ems_no || '',\n      fac_name: r.fac_name || '',\n      address: r.address || '',\n      per_edate: convertToISO(r.per_edate),\n      ban: r.ban || ''\n    }\n  };\n});"
+            },
+            "id": "7e50f597-ecfd-46b7-bc86-08755460ca95",
+            "name": "格式轉換3",
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 2,
+            "position": [
+                -896,
+                160
+            ]
+        },
+        {
+            "parameters": {
+                "operation": "delete",
+                "tableId": "air_permits",
+                "matchType": "allFilters",
+                "filters": {
+                    "conditions": [
+                        {
+                            "keyName": "ems_no",
+                            "condition": "eq",
+                            "keyValue": "={{ $json.ems_no }}"
+                        }
+                    ]
+                }
+            },
+            "id": "bcb01b3c-480e-4f49-8253-cb905cf73888",
+            "name": "刪除空氣的",
+            "type": "n8n-nodes-base.supabase",
+            "typeVersion": 1,
+            "position": [
+                -496,
+                -368
+            ],
+            "credentials": {
+                "supabaseApi": {
+                    "id": "RnsK9FrQBnMRc38T",
+                    "name": "nickleo051216 jet"
+                }
+            }
+        },
+        {
+            "parameters": {
+                "tableId": "air_permits",
+                "fieldsUi": {
+                    "fieldValues": [
+                        {
+                            "fieldId": "ems_no",
+                            "fieldValue": "={{ $json.ems_no }}"
+                        },
+                        {
+                            "fieldId": "county",
+                            "fieldValue": "={{ $json.county }}"
+                        },
+                        {
+                            "fieldId": "company_name",
+                            "fieldValue": "={{ $json.company_name }}"
+                        },
+                        {
+                            "fieldId": "address",
+                            "fieldValue": "={{ $json.address }}"
+                        },
+                        {
+                            "fieldId": "category",
+                            "fieldValue": "={{ $json.category }}"
+                        },
+                        {
+                            "fieldId": "expiry_date",
+                            "fieldValue": "={{ $json.expiry_date }}"
+                        },
+                        {
+                            "fieldId": "uniformno",
+                            "fieldValue": "={{ $json.uniformno }}"
+                        }
+                    ]
+                }
+            },
+            "id": "0d41ce47-cdc4-4e86-b288-b362cdfceb50",
+            "name": "更新空的2",
+            "type": "n8n-nodes-base.supabase",
+            "typeVersion": 1,
+            "position": [
+                -496,
+                -128
+            ],
+            "credentials": {
+                "supabaseApi": {
+                    "id": "RnsK9FrQBnMRc38T",
+                    "name": "nickleo051216 jet"
+                }
+            }
+        },
+        {
+            "parameters": {
+                "operation": "delete",
+                "tableId": "water_permits",
+                "matchType": "allFilters",
+                "filters": {
+                    "conditions": [
+                        {
+                            "keyName": "ems_no",
+                            "condition": "eq",
+                            "keyValue": "={{ $json.ems_no }}"
+                        }
+                    ]
+                }
+            },
+            "id": "2e252048-7ad3-422d-b1ae-dde3704dffea",
+            "name": "刪除水的",
+            "type": "n8n-nodes-base.supabase",
+            "typeVersion": 1,
+            "position": [
+                -512,
+                80
+            ],
+            "credentials": {
+                "supabaseApi": {
+                    "id": "RnsK9FrQBnMRc38T",
+                    "name": "nickleo051216 jet"
+                }
+            }
+        },
+        {
+            "parameters": {
+                "tableId": "water_permits",
+                "fieldsUi": {
+                    "fieldValues": [
+                        {
+                            "fieldId": "ems_no",
+                            "fieldValue": "={{ $json.ems_no }}"
+                        },
+                        {
+                            "fieldId": "ban",
+                            "fieldValue": "={{ $json.ban }}"
+                        },
+                        {
+                            "fieldId": "fac_name",
+                            "fieldValue": "={{ $json.fac_name }}"
+                        },
+                        {
+                            "fieldId": "address",
+                            "fieldValue": "={{ $json.address }}"
+                        },
+                        {
+                            "fieldId": "per_edate",
+                            "fieldValue": "={{ $json.per_edate }}"
+                        }
+                    ]
+                }
+            },
+            "id": "883fd5e3-dbec-4d97-a86c-46afd2b630c8",
+            "name": "更新水1",
+            "type": "n8n-nodes-base.supabase",
+            "typeVersion": 1,
+            "position": [
+                -512,
+                320
+            ],
+            "credentials": {
+                "supabaseApi": {
+                    "id": "RnsK9FrQBnMRc38T",
+                    "name": "nickleo051216 jet"
+                }
+            }
+        },
+        {
+            "parameters": {
+                "jsCode": "const items = $input.all();\nconst successCount = items.length;\n\nreturn [{\n  json: {\n    type: 'air',\n    success: true,\n    message: `空污同步 ${successCount} 筆`,\n    count: successCount\n  }\n}];"
+            },
+            "id": "0b111168-2ca4-4d42-a4c1-0908d2b40947",
+            "name": "統計結果3",
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 2,
+            "position": [
+                -320,
+                -128
+            ]
+        },
+        {
+            "parameters": {
+                "jsCode": "const items = $input.all();\nconst successCount = items.length;\n\nreturn [{\n  json: {\n    type: 'water',\n    success: true,\n    message: `水污同步 ${successCount} 筆`,\n    count: successCount\n  }\n}];"
+            },
+            "id": "582afdd2-dba6-4f4b-a518-594d7fae261c",
+            "name": "統計結果4",
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 2,
+            "position": [
+                -320,
+                176
+            ]
+        },
+        {
+            "parameters": {
+                "jsCode": "const items = $input.all();\nlet airCount = 0, waterCount = 0;\n\nitems.forEach(item => {\n  if (item.json.type === 'air') airCount = item.json.count || 0;\n  if (item.json.type === 'water') waterCount = item.json.count || 0;\n});\n\nreturn [{\n  json: {\n    success: true,\n    message: `同步完成！空污 ${airCount} 筆，水污 ${waterCount} 筆`,\n    airCount: airCount,\n    waterCount: waterCount,\n    total: airCount + waterCount,\n    timestamp: new Date().toISOString()\n  }\n}];"
+            },
+            "id": "33da3046-504d-4879-90b8-a7372d46ade2",
+            "name": "合併結果",
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 2,
+            "position": [
+                -16,
+                -16
+            ]
+        },
+        {
+            "parameters": {
+                "respondWith": "json",
+                "responseBody": "={{ $json }}",
+                "options": {}
+            },
+            "id": "bb133e1c-8dd8-4d78-98e6-c1e18be574a6",
+            "name": "回應成功1",
+            "type": "n8n-nodes-base.respondToWebhook",
+            "typeVersion": 1.1,
+            "position": [
+                208,
+                -16
+            ]
+        }
+    ],
+    "connections": {
+        "webhook1": {
+            "main": [
+                [
+                    {
+                        "node": "拆出空",
+                        "type": "main",
+                        "index": 0
+                    },
+                    {
+                        "node": "拆出水",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "拆出空": {
+            "main": [
+                [
+                    {
+                        "node": "格式轉換2",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "拆出水": {
+            "main": [
+                [
+                    {
+                        "node": "格式轉換3",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "格式轉換2": {
+            "main": [
+                [
+                    {
+                        "node": "刪除空氣的",
+                        "type": "main",
+                        "index": 0
+                    },
+                    {
+                        "node": "更新空的2",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "格式轉換3": {
+            "main": [
+                [
+                    {
+                        "node": "刪除水的",
+                        "type": "main",
+                        "index": 0
+                    },
+                    {
+                        "node": "更新水1",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "更新空的2": {
+            "main": [
+                [
+                    {
+                        "node": "統計結果3",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "更新水1": {
+            "main": [
+                [
+                    {
+                        "node": "統計結果4",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "統計結果3": {
+            "main": [
+                [
+                    {
+                        "node": "合併結果",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "統計結果4": {
+            "main": [
+                [
+                    {
+                        "node": "合併結果",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "合併結果": {
+            "main": [
+                [
+                    {
+                        "node": "回應成功1",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        }
+    },
+    "active": false,
+    "settings": {
+        "executionOrder": "v1"
+    },
+    "versionId": "fixed-v2",
+    "meta": {
+        "templateCredsSetupCompleted": true,
+        "instanceId": "5cb73612af9c3d99fb9474cf656425558c43c24de4951be223ad83a0b24b4e43"
+    },
+    "id": "sync-air-water-v2",
+    "tags": []
+}
