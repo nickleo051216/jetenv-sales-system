@@ -64,7 +64,7 @@ if (!cmdArgs.county || !cmdArgs.district) {
 // 設定區
 // ============================================
 const CONFIG = {
-    BASE_URL: 'https://aodmis.moenv.gov.tw/opendata/#/lq',
+    HOME_URL: 'https://aodmis.moenv.gov.tw/opendata/ab/1',
     PAGE_DELAY: 3000,
     HEADLESS: cmdArgs.headless,
     EXCEL_FILENAME: 'air_permits.xlsx',
@@ -86,28 +86,20 @@ async function selectCounty(page, countyName) {
     console.log(`   🔽 選擇縣市: ${countyName}`);
 
     const success = await page.evaluate((county) => {
-        const selects = document.querySelectorAll('select');
-        // 通常第一個 select 是縣市
-        const countySelect = selects[0];
+        const countySelect = document.querySelector('#cityCode');
 
         if (countySelect) {
-            // 找到對應的 option
             const options = Array.from(countySelect.options);
             const found = options.find(opt => opt.text === county || opt.value === county);
 
             if (found) {
                 countySelect.value = found.value;
-                // 觸發 change 事件
                 countySelect.dispatchEvent(new Event('change', { bubbles: true }));
-                // 如果有使用 jQuery
-                if (typeof $ !== 'undefined') {
-                    $(countySelect).trigger('change');
-                }
                 return { success: true, value: found.value };
             }
             return { success: false, options: options.map(o => o.text).slice(0, 10) };
         }
-        return { success: false, error: 'Select not found' };
+        return { success: false, error: '#cityCode select not found' };
     }, countyName);
 
     if (!success.success) {
@@ -127,28 +119,20 @@ async function selectDistrict(page, districtName) {
     console.log(`   🔽 選擇區域: ${districtName}`);
 
     const result = await page.evaluate((district) => {
-        const selects = document.querySelectorAll('select');
-        // 通常第二個 select 是區域
-        const districtSelect = selects[1];
+        const districtSelect = document.querySelector('#townCode');
 
         if (districtSelect) {
-            // 找到對應的 option
             const options = Array.from(districtSelect.options);
             const found = options.find(opt => opt.text === district || opt.value === district);
 
             if (found) {
                 districtSelect.value = found.value;
-                // 觸發 change 事件
                 districtSelect.dispatchEvent(new Event('change', { bubbles: true }));
-                // 如果有使用 jQuery
-                if (typeof $ !== 'undefined') {
-                    $(districtSelect).trigger('change');
-                }
                 return { success: true, value: found.value };
             }
             return { success: false, options: options.map(o => o.text).slice(0, 20) };
         }
-        return { success: false, error: 'District select not found' };
+        return { success: false, error: '#townCode select not found' };
     }, districtName);
 
     if (!result.success) {
@@ -167,18 +151,7 @@ async function checkPermitAndQuery(page) {
     console.log(`   ☑️  確認「許可」已勾選...`);
 
     const result = await page.evaluate(() => {
-        const checkboxes = document.querySelectorAll('input[type="checkbox"]');
-        let permitCheckbox = null;
-
-        // 找到「許可」checkbox
-        for (const cb of checkboxes) {
-            const label = cb.parentElement?.textContent || '';
-            const nextLabel = cb.nextElementSibling?.textContent || '';
-            if (label.includes('許可') || nextLabel.includes('許可')) {
-                permitCheckbox = cb;
-                break;
-            }
-        }
+        const permitCheckbox = document.querySelector('#scales');
 
         if (permitCheckbox && !permitCheckbox.checked) {
             permitCheckbox.click();
@@ -197,16 +170,13 @@ async function checkPermitAndQuery(page) {
     // 點擊查詢按鈕
     console.log('   🔍 點擊查詢按鈕...');
     await page.evaluate(() => {
-        const buttons = document.querySelectorAll('button, input[type="button"]');
-        for (const btn of buttons) {
-            if (btn.textContent?.includes('查詢') || btn.value?.includes('查詢')) {
-                btn.click();
-                return;
-            }
+        const btn = document.querySelector('.Orang_btn, button.btn-lg');
+        if (btn) { btn.click(); return; }
+        // 備用：文字匹配
+        const buttons = document.querySelectorAll('button');
+        for (const b of buttons) {
+            if (b.textContent?.includes('查詢')) { b.click(); return; }
         }
-        // 備用：尋找橘色警告按鈕
-        const warnBtn = document.querySelector('.btn-warning, button[class*="warning"]');
-        if (warnBtn) warnBtn.click();
     });
 
     console.log('   ⏳ 等待查詢結果載入...');
@@ -236,11 +206,76 @@ async function main() {
     const processedEmsNos = new Set();
     let districtName = CONFIG.TARGET_DISTRICT;
 
-    try {
-        // Step 1: 開啟網站
-        console.log('📡 開啟網站...');
-        await page.goto(CONFIG.BASE_URL, { waitUntil: 'networkidle2' });
+    // 導航到列管查詢頁面（先到首頁再點擊導航，因為 Angular SPA 不支援直接進入子路由）
+    async function navigateToLqPage() {
+        console.log('📡 開啟首頁...');
+        await page.goto(CONFIG.HOME_URL, { waitUntil: 'networkidle2' });
         await sleep(2000);
+
+        console.log('📡 點擊「列管工廠資料公開」進入查詢頁...');
+        const clicked = await page.evaluate(() => {
+            const links = document.querySelectorAll('a');
+            for (const link of links) {
+                if (link.textContent?.trim() === '列管工廠資料公開') {
+                    link.click();
+                    return true;
+                }
+            }
+            return false;
+        });
+
+        if (!clicked) throw new Error('找不到「列管工廠資料公開」連結');
+
+        // 等待 Angular 路由切換完成，並確認 select 載入
+        await page.waitForSelector('#cityCode', { timeout: 15000 });
+        await sleep(2000);
+        console.log('   ✅ 查詢頁面已載入');
+    }
+
+    // 恢復查詢狀態（從詳細頁返回後使用）
+    // Angular SPA goBack 後查詢條件會全部重置，必須重新選擇並查詢
+    async function ensureState(targetPage) {
+        // 先 goBack 到列表頁（如果還在詳細頁）
+        const onDetailPage = await page.evaluate(() => {
+            return window.location.pathname.includes('/lv/');
+        });
+        if (onDetailPage) {
+            await page.goBack();
+            await sleep(1500);
+        }
+
+        // 確認 select 存在，不存在就重新導航
+        const hasSelect = await page.evaluate(() => !!document.querySelector('#cityCode'));
+        if (!hasSelect) {
+            await navigateToLqPage();
+        }
+
+        await selectCounty(page, CONFIG.TARGET_COUNTY);
+        await selectDistrict(page, CONFIG.TARGET_DISTRICT);
+        await checkPermitAndQuery(page);
+
+        // 如果不是第 1 頁，跳轉到目標頁
+        if (targetPage > 1) {
+            console.log(`   🔄 跳轉到第 ${targetPage} 頁...`);
+            const jumped = await page.evaluate((tp) => {
+                const pagination = document.querySelector('ul.pagination, .pagination');
+                if (!pagination) return false;
+                const links = pagination.querySelectorAll('a, li a');
+                for (const link of links) {
+                    if (link.textContent.trim() === String(tp)) {
+                        link.click();
+                        return true;
+                    }
+                }
+                return false;
+            }, targetPage);
+            if (jumped) await sleep(CONFIG.PAGE_DELAY);
+        }
+    }
+
+    try {
+        // Step 1: 導航到查詢頁面
+        await navigateToLqPage();
 
         // Step 2: 自動選擇縣市和區域
         console.log('\n🤖 自動選擇查詢條件...');
@@ -383,15 +418,19 @@ async function main() {
 
                         console.log(` ✅ ${addedCount} 筆`);
 
-                        await page.goBack();
-                        await sleep(CONFIG.PAGE_DELAY);
+                        // Angular SPA goBack 後查詢狀態會重置，必須每次都恢復
+                        await ensureState(currentPage);
                     } else {
                         console.log(' ⏭️ 找不到');
                     }
                 } catch (err) {
-                    console.log(` ⚠️ ${err.message.substring(0, 25)}`);
-                    try { await page.goBack(); } catch (e) { }
-                    await sleep(1500);
+                    console.log(` ⚠️ ${err.message.substring(0, 40)}`);
+                    // 發生錯誤後恢復狀態
+                    try {
+                        await ensureState(currentPage);
+                    } catch (e) {
+                        console.log(`   ❌ 恢復失敗: ${e.message.substring(0, 30)}`);
+                    }
                 }
             }
 
