@@ -153,7 +153,7 @@ async function runScraper(county, district) {
 // 同步到 Supabase
 // ============================================
 async function syncToSupabase() {
-    const SUPABASE_URL = process.env.VITE_SUPABASE_URL || 'https://dtzwgicsrkbnevzxjgcr.supabase.co';
+    const SUPABASE_URL = process.env.VITE_SUPABASE_URL || 'https://yeimehdcguwnwzkmopsu.supabase.co';
     const SUPABASE_KEY = process.env.VITE_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY;
 
     if (!SUPABASE_KEY) {

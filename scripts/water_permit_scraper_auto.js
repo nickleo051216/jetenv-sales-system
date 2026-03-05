@@ -20,9 +20,17 @@ import { fileURLToPath } from 'url';
 import ExcelJS from 'exceljs';
 import axios from 'axios';
 import * as pdfjsLib from 'pdfjs-dist/legacy/build/pdf.mjs';
+import { createRequire } from 'module';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+
+// pdfjs-dist v5 需要指定標準字型路徑
+const require = createRequire(import.meta.url);
+const STANDARD_FONT_DATA_URL = path.join(
+    path.dirname(require.resolve('pdfjs-dist/package.json')),
+    'standard_fonts/'
+);
 
 // 解析命令行參數
 function parseArgs() {
@@ -78,7 +86,7 @@ function sleep(ms) {
 async function extractTextFromPdf(buffer) {
     try {
         const uint8Array = new Uint8Array(buffer);
-        const loadingTask = pdfjsLib.getDocument({ data: uint8Array });
+        const loadingTask = pdfjsLib.getDocument({ data: uint8Array, standardFontDataUrl: STANDARD_FONT_DATA_URL });
         const pdf = await loadingTask.promise;
 
         let fullText = '';

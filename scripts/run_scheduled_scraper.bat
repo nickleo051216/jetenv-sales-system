@@ -1,5 +1,5 @@
 @echo off
-REM 空污許可證定時爬蟲 - Windows 工作排程器呼叫用
+REM 許可證爬蟲（空污+水污）- Windows 工作排程器呼叫用
 REM 每個工作日 10:00 AM 執行，腳本內部自動判斷今天跑哪些區域
 
 cd /d "C:\Users\jeten\.gemini\antigravity\scratch\jetenv-sales-system"
@@ -14,7 +14,8 @@ echo ========================================>> "%LOGFILE%"
 echo 執行時間: %date% %time%>> "%LOGFILE%"
 echo ========================================>> "%LOGFILE%"
 
-node scripts/scheduled_air_scraper.js >> "%LOGFILE%" 2>&1
+node scripts/scheduled_scraper.js >> "%LOGFILE%" 2>&1
 
+echo.>> "%LOGFILE%"
 echo 完成時間: %date% %time%>> "%LOGFILE%"
 echo.>> "%LOGFILE%"

@@ -68,6 +68,7 @@ const CONFIG = {
     PAGE_DELAY: 3000,
     HEADLESS: cmdArgs.headless,
     EXCEL_FILENAME: 'air_permits.xlsx',
+    ONE_DRIVE_PATH: 'C:\\Users\\jeten\\OneDrive\\Nick Sales\\00. 業務所需資料\\陌生開發資料區\\1. 許可證\\air_permits.xlsx',
     TARGET_COUNTY: cmdArgs.county,
     TARGET_DISTRICT: cmdArgs.district,
 };
@@ -623,13 +624,11 @@ async function saveToExcel(data, sheetName) {
         .replace(/[\\\/\?\*\[\]:]/g, '') // 移除不允許的字元
         .substring(0, 31); // 限制長度
 
-    // 檢查是否已存在同名分頁
-    let existingSheet = workbook.getWorksheet(safeSheetName);
+    // 檢查是否已存在同名分頁 → 直接覆蓋（刪除舊的）
+    const existingSheet = workbook.getWorksheet(safeSheetName);
     if (existingSheet) {
-        // 如果已存在，加上時間戳記
-        const timestamp = new Date().toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit' }).replace(':', '');
-        safeSheetName = `${safeSheetName}_${timestamp}`.substring(0, 31);
-        console.log(`   ⚠️ 地區分頁已存在，改用名稱：${safeSheetName}`);
+        workbook.removeWorksheet(existingSheet.id);
+        console.log(`   🔄 已刪除舊的「${safeSheetName}」分頁，將重新寫入`);
     }
 
     // 新增地區分頁
@@ -726,11 +725,19 @@ async function saveToExcel(data, sheetName) {
 
     // ========== 3. 儲存檔案 ==========
     await workbook.xlsx.writeFile(filepath);
+    console.log(`\n📁 已儲存到：${filepath}`);
+
+    // 同步複製到 OneDrive
+    const oneDrivePath = CONFIG.ONE_DRIVE_PATH;
+    try {
+        fs.copyFileSync(filepath, oneDrivePath);
+        console.log(`☁️  已同步到 OneDrive：${oneDrivePath}`);
+    } catch (err) {
+        console.log(`⚠️  OneDrive 同步失敗：${err.message}`);
+    }
 
     // 列出所有分頁
     const sheetNames = workbook.worksheets.map(ws => ws.name);
-
-    console.log(`\n📁 已儲存到：${filepath}`);
     console.log(`\n📑 目前所有分頁（共 ${sheetNames.length} 個）：`);
     sheetNames.forEach((name, idx) => {
         const marker = name === '總表' ? '📊' : '📄';

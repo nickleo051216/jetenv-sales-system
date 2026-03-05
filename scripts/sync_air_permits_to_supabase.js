@@ -20,8 +20,8 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 // Supabase 設定
-const SUPABASE_URL = 'https://dtzwgicsrkbnevzxjgcr.supabase.co';
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImR0endnaWNzcmtibmV2enhqZ2NyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MzMzMTY3MTcsImV4cCI6MjA0ODg5MjcxN30.Y0g9iNYIygtD7MViYBpk77OEEWJfjXFoqkkf5M_aMDA';
+const SUPABASE_URL = process.env.VITE_SUPABASE_URL || 'https://yeimehdcguwnwzkmopsu.supabase.co';
+const SUPABASE_ANON_KEY = process.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InllaW1laGRjZ3V3bnd6a21vcHN1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjU0NzI5MTQsImV4cCI6MjA4MTA0ODkxNH0.OhQlheFmhJSoY-2U5OGPQQszSndZ0aHGBt-zsHOq0U4';
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 

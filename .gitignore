@@ -33,3 +33,9 @@ scripts/_archive/
 
 # Data backups
 data/backup/
+
+# Credentials
+google_credentials.json
+
+# Windows artifacts
+nul
